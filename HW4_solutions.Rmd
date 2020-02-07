@@ -1,0 +1,338 @@
+---
+title: "Homework 4"
+author: "Zijing Gao"
+output: pdf_document
+---
+
+# Problem 1
+
+## (a)
+
+Let $\theta'=(\mu_1', \mu_2', \sigma_1^{'2}, \sigma_2^{'2}, p_1', p_2')$
+\begin{align}
+Q(\theta',\theta) & = \sum_{i=1}^N r_{i1} \log \left( P(\hat{X}_i, z_i=1 \ | \ \theta') \right) + r_{i2} \log \left( P(\hat{X}_i, z_i=2 \ | \ \theta') \right) \\
+ & =
+\sum_{i=1}^N r_{i1} \log \left( p_1' \mathcal{N}(\hat{X}_i, \ | \ \mu_1', \sigma_1^{'2}) \right) + r_{i2}
+\log \left( p_2' \mathcal{N}(\hat{X}_i, \ | \ \mu_2', \sigma_2^{'2}) \right)
+\\ \notag
+& =
+\sum_{i=1}^N r_{i1} \left(\log p_1' - \frac{1}{2} \log(2\pi \sigma_1^{'2})
+- \frac{(\hat{X}_i - \mu_1')^2}{2\sigma_1^{'2}}  \right) +
+r_{i2}
+\left(\log p_2' - \frac{1}{2} \log(2\pi \sigma_2^{'2})
+- \frac{(\hat{X}_i - \mu_2')^2}{2\sigma_2^{2'}}  \right)
+\end{align}
+
+Let $\theta=(\mu_1, \mu_2, \sigma_1^{2}, \sigma_2^{2}, p_1, p_2)$.   The key point is that the $z_i$ and hence $r_{i1}, r_{i2}$ are determined according to $\theta$, not $\theta'$.
+\begin{align}
+r_{i1} & = P(z_i = 1 \ | \ \hat{X}_i, \theta)
+ = \frac{P(z_i=1, \hat{X}_i \ | \ \theta)}{P\hat{X}_i \ | \ \theta)}
+=
+\frac{p_1 \mathcal{N}(\hat{X}_i, \ | \ \mu_1, \sigma_1^{2})}
+{p_1 \mathcal{N}(\hat{X}_i, \ | \ \mu_1, \sigma_1^{2}) +
+p_2 \mathcal{N}(\hat{X}_i, \ | \ \mu_2, \sigma_2^{2})},
+\end{align}
+and $r_{i2}$ is analogously,
+\begin{equation}
+r_{i2} = \frac{p_2 \mathcal{N}(\hat{X}_i, \ | \ \mu_2, \sigma_2^{2})}
+{p_1 \mathcal{N}(\hat{X}_i, \ | \ \mu_1, \sigma_1^{2}) +
+p_2 \mathcal{N}(\hat{X}_i, \ | \ \mu_2, \sigma_2^{2})}
+\end{equation}
+
+## (b)
+Let's start with the $\mu_1'$ partial; the $\mu_2'$ partial will be analogous.
+\begin{equation}
+\frac{\partial}{\partial \mu_1'} Q(\theta',\theta) =
+\sum_{i=1}^N r_{i1} \frac{(\hat{X}_i - \mu_1')}{\sigma_1^{'2}}.
+\end{equation}
+Setting the $\mu_1'$ partial to $0$ and solving gives
+\begin{equation}
+\mu_1' = \frac{\sum_{i=1}^N r_{i1} \hat{X}_i}{\sum_{i=1}^N r_{i1}}.
+\end{equation}
+
+Now the $\sigma_1^{2'}$ partial,
+\begin{equation}
+\frac{\partial}{\partial \sigma_1^{2'}} Q(\theta',\theta) =
+\sum_{i=1}^N r_{i1} \left(- \frac{1}{\sigma_1^{'2}}
++ \frac{(\hat{X}_i - \mu_1')^2}{(\sigma_1^{'2})^2} \right).
+\end{equation}
+Setting the partial to zero and solving gives
+\begin{equation}
+\sigma_1^{'2} = \frac{\sum_{i=1}^N r_{i1} (\hat{X}_i - \mu_1')^2}{\sum_{i=1}^N r_{i1}}.
+\end{equation}
+
+Finally, consider the $p_1$ and $p_2$ partials.  We could substitute $p_2 = 1 - p_1$ and proceed, but here I'll show you how to use Lagrange multipliers which is simpler in the case of many mixtures.  Let $G(p_1, p_2) = p_1 + p_2$; we have the constraint $G(p_1, p_2) = 1$.   Then the Lagrange multiplier condition says that the optimum $p_1, p_2$ satisfy the following condition for some constant $\lambda$,
+\begin{equation}
+\left(
+\begin{array}{c}
+\frac{\partial}{\partial p_1'} Q(\theta',\theta) \\
+\frac{\partial}{\partial p_2'} Q(\theta',\theta) \\
+\end{array}
+\right) =  \lambda
+\left(
+\begin{array}{c}
+\frac{\partial}{\partial p_1'} G(p_1,p_2) \\
+\frac{\partial}{\partial p_1'} G(p_1,p_2))\\
+\end{array}
+\right)
+\end{equation}
+
+Plugging in the partials gives,
+\begin{equation}
+\left(
+\begin{array}{c}
+\sum_{i=1}^N \frac{r_{i1}}{p_1'} \\
+ \sum_{i=1}^N \frac{r_{i1}}{p_2'} \\
+\end{array}
+\right) =  \lambda
+\left(
+\begin{array}{c}
+1 \\
+1 \\
+\end{array}
+\right)
+\end{equation}
+
+We have three unknowns: $p_1', p_2', \lambda$.  The Lagrange condition above gives two conditions and then we have the constraint $p_1 + p_2 = 1$.  Solving these three equations simultaneously gives
+\begin{equation}
+p_1' = \frac{1}{N} \sum_{i=1}^N r_{i1},
+\end{equation}
+and analogously for $p_2'$.
+
+```{r}
+library(dplyr, quietly = T)
+```
+
+```{r, cache=T}
+logL <- function(X, theta)
+{
+  p1 <- theta["p1"]; p2 <- 1-p1
+  mu1 <- theta["mu1"]; mu2 <- theta["mu2"]
+  s1 <- theta["sigma1"]; s2 <- theta["sigma2"]
+
+  N1 <- dnorm(X, mean=mu1, sd=sqrt(s1))
+  N2 <- dnorm(X, mean=mu2, sd=sqrt(s2))
+
+  ll <- log(p1*N1 + p2*N2) %>% sum
+  return (ll)
+}
+
+EM_step <- function(X, theta)
+{
+  p1 <- theta["p1"]; p2 <- 1-p1
+  mu1 <- theta["mu1"]; mu2 <- theta["mu2"]
+  s1 <- theta["sigma1"]; s2 <- theta["sigma2"]
+  N <- length(X)
+  
+  N1 <- dnorm(X, mean=mu1, sd=sqrt(s1))
+  N2 <- dnorm(X, mean=mu2, sd=sqrt(s2))
+  
+  probX <- p1*N1 + p2*N2
+  r1 <- p1*N1/probX
+  r2 <- 1 - r1
+  
+  sum_r1 <- sum(r1); sum_r2 <- sum(r2)
+  new_mu1 <- sum(r1*X)/sum_r1
+  new_mu2 <- sum(r2*X)/sum_r2
+  new_sigma1 <- sum(r1*(X - new_mu1)^2)/sum_r1
+  new_sigma2 <- sum(r2*(X - new_mu2)^2)/sum_r2
+  new_p1 <- sum(r1)/N
+
+  
+  return (c(mu1=new_mu1, mu2=new_mu2,
+            sigma1=new_sigma1, sigma2=new_sigma2,
+            p1=new_p1))
+}
+
+EM <- function(theta, iterations=1000, debug=T)
+{
+  X <- read.table("Hope Heights.txt", header=T) %>% dplyr::pull(Height)
+  
+  for (i in 1:iterations) {
+    if (debug)
+      cat("likelihood=", logL(X, theta), "\n")
+    theta <- EM_step(X, theta)
+  }
+  
+  return (theta)
+}
+
+start_theta <- c(mu1=60, mu2=80, sigma1=100, sigma2=100, p1=.3)
+# let's run for 15 iterations to make sure likelihood is increasing
+EM(start_theta, iterations=20, debug=T)
+
+# looks good!, now let's run 1000 iterations
+final_theta <- EM(start_theta, iterations=1000, debug=F)
+
+X <- read.table("Hope Heights.txt", header=T) %>% dplyr::pull(Height)
+print(final_theta)
+print(logL(X, final_theta))
+```
+
+This solution occurs frequently in mixture models.  One of the mixtures is centered at a datapoint with no variance, which will cause the likelihood to go to infinity.   Let's try many starting points and throw out such solutions.
+```{r, cache=T}
+N_starts <- 100
+X <- read.table("Hope Heights.txt", header=T) %>% dplyr::pull(Height)
+likelihoods <- rep(NA, N_starts) %>% as.numeric
+save_thetas <- list()
+for (i in 1:N_starts) {
+  start_theta <- c(mu1=runif(1, min=min(X), max=max(X)), 
+                   mu2=runif(1, min=min(X), max=max(X)), 
+                   sigma1=runif(1)*var(X), 
+                   sigma2=runif(1)*var(X), 
+                   p1=runif(1, min=.1, max=.9))
+  final_theta <- EM(start_theta, iterations=1000, debug=F)
+  likelihoods[i] <- logL(X, final_theta)
+  save_thetas <- append(save_thetas, list(final_theta))
+}
+
+# find the solutions that don't explode or go bad
+good_ind <- !is.nan(likelihoods) & !is.infinite(likelihoods)
+likelihoods <- likelihoods[good_ind]
+save_thetas <- save_thetas[good_ind]
+
+best_theta <- save_thetas[[which.max(likelihoods)]]
+print(best_theta)
+print(logL(X, best_theta))
+```
+
+A little better, but still not the solution we expect.  Let's cheat a bit and start with a point that uses the gender information.
+```{r, cache=T}
+d <- read.table("Hope Heights.txt", header=T)
+mu1 <- dplyr::filter(d, Gender==1)$Height %>% mean
+sigma1 <- dplyr::filter(d, Gender==1)$Height %>% var
+mu2 <- dplyr::filter(d, Gender==2)$Height %>% mean
+sigma2 <- dplyr::filter(d, Gender==2)$Height %>% var
+p1 <- (dplyr::filter(d, Gender==1) %>% nrow)/nrow(d)
+
+
+start_theta <- c(mu1=mu1, mu2=mu2, sigma1=sigma1, sigma2=sigma2, p1=p1)
+print(start_theta)
+final_theta <- EM(start_theta, iterations=1000, debug=F)
+
+print(final_theta)
+print(logL(X, final_theta))
+```
+
+Not any better!  But notice that the likelihood of the previous $\theta$ we found is greater than what we get when we use the \textit{true} $\theta$
+```{r}
+# compare to start theta logL
+print(logL(X, start_theta))
+print(logL(X, best_theta))
+```
+
+The moral is 1) the non-convexity of mixture model optimization causes a lot of problems and 2) the dataset we have is hard to separate into two mixtures that are intuitively meaningful.
+
+## (d)
+
+See homework 3 solutions as this is identical.
+
+# Problem 2
+
+In this case $\theta = (\mu^{(1)}, \mu^{(2)}, p_1)$ and $\mu^{(1)}, \mu^{(2)} \in \mathbb{R}^{10}$.
+\begin{align}
+Q(\theta', \theta) & =
+\sum_{i=1}^n r_{i1} \log P(\hat{X}^{(i)}, z_i=1 \ | \ \theta') + r_{i2} \log P(\hat{X}^{(i)}, z_i=2 \ | \ \theta')
+\\ \notag
+& = \sum_{i=1}^n r_{i1} \log \left(p_1' \Pi_{j=1}^{10} (\mu^{(1)'}_j)^{X^{(i)}_j} (1 - \mu^{(1)'}_j)^{1 - X^{(i)}_j} \right) +
+r_{i2} \log \left(p_2' \Pi_{j=1}^{10} (\mu^{(2)'}_j)^{X^{(i)}_j} (1 - \mu^{(2)'}_j)^{1 - X^{(i)}_j} \right)
+\\ \notag
+& =
+ \sum_{i=1}^n r_{i1} \left(\log p_1' + \sum_{j=1}^{10} {X^{(i)}_j} \log (\mu^{(1)'}_j) + {(1-X^{(i)}_j)}\log (1 - \mu^{(1)'}_j) \right) 
+ \\ \notag 
+ & \ \ \ \ 
+ + r_{i2} \left(\log p_2' + \sum_{j=1}^{10} {X^{(i)}_j} \log (\mu^{(2)'}_j) + {(1-X^{(i)}_j)}\log (1 - \mu^{(2)'}_j) \right).
+\end{align}
+
+Taking the partial with respect to $\mu^{(1)'}_j$ gives,
+\begin{equation}
+\frac{\partial}{\partial \mu^{(1)'}_j} Q(\theta', \theta)
+= \sum_{i=1}^n r_{i1} \left(\frac{{X^{(i)}_j}}{\mu^{(1)'}_j} - \frac{{1 - X^{(i)}_j}}{1 - \mu^{(1)'}_j} \right)
+\end{equation}
+and setting the partial to $0$ and solving gives
+\begin{equation}
+\mu^{(1)'}_j = \frac{\sum_{i=1}^N r_{i1} X^{(i)}_j}{\sum_{i=1}^N r_{i1}}.
+\end{equation}
+The analogous formula holds for $\mu^{(2)'}_j$.
+
+Finally,
+\begin{equation}
+r_{i1} = P(z_i=1 \ | \ \hat{X}^{(i)}, \theta)
+= \frac{p_1' \Pi_{j=1}^{10} (\mu^{(1)'}_j)^{X^{(i)}_j} (1 - \mu^{(1)'}_j)^{1 - X^{(i)}_j}}{p_1' \Pi_{j=1}^{10} (\mu^{(1)'}_j)^{X^{(i)}_j} (1 - \mu^{(1)'}_j)^{1 - X^{(i)}_j} + p_2' \Pi_{j=1}^{10} (\mu^{(2)'}_j)^{X^{(i)}_j} (1 - \mu^{(2)'}_j)^{1 - X^{(i)}_j}}
+\end{equation}
+
+## (b)
+
+```{r, cache=T}
+# P(Xi, zi | \mu) returned as a vector over i
+Pz <- function(mu, p, X)
+{
+  # matrix with identical rows, all with value mu
+  mu_matrix <- matrix(mu, nrow=nrow(X), ncol=ncol(X), byrow=T)
+  m <- mu_matrix^X*(1 - mu_matrix)^(1-X)
+  
+  probs <- p*apply(m, 1, prod)
+  return (probs)
+}
+
+logL <- function(theta, X)
+{
+  mu1 <- theta$mu1
+  mu2 <- theta$mu2
+  p1 <- theta$p1
+  p2 <- 1 - p1
+  
+  Pz1 <- Pz(mu1, p1, X)
+  Pz2 <- Pz(mu2, p2, X)
+  
+  return (sum(log(Pz1 + Pz2)))
+}
+
+EM_step <- function(theta, X)
+{
+  mu1 <- theta$mu1
+  mu2 <- theta$mu2
+  p1 <- theta$p1
+  p2 <- 1 - p1
+  N <- nrow(X)
+  
+  Pz1 <- Pz(mu1, p1, X)
+  Pz2 <- Pz(mu2, p2, X)
+  
+  r1 <- Pz1/(Pz1 + Pz2)
+  r2 <- 1 - r1
+  
+  new_mu1 <- (t(r1) %*% X)/sum(r1)
+  new_mu2 <- (t(r2) %*% X)/sum(r2)
+  new_p1 <- sum(r1)/N
+  
+  return (list(mu1=new_mu1, mu2=new_mu2, p1=new_p1))
+}
+
+# Notice we can use the exact same EM function defined for Problem 1,
+# although here I pass in X
+EM <- function(theta, X, iterations=1000, debug=T)
+{
+  for (i in 1:iterations) {
+    if (debug)
+      cat("likelihood=", logL(theta, X), "\n")
+    theta <- EM_step(theta, X)
+  }
+  
+  return (theta)
+}
+
+X <- read.csv("noisy_bits.csv", header=T) %>% as.matrix
+# select a random theta
+start_theta <- list(mu1=runif(10), mu2=runif(10), p1=runif(1))
+print(start_theta)
+
+# test to see that likelihood is increasing
+test_theta <- EM(start_theta, X, iterations=10, debug=T)
+
+# looks good! let it rip!
+final_theta <- EM(start_theta, X, iterations=1000, debug=F)
+print(final_theta)
+```
+
+Notice that $\mu^{(1)}$ has roughly a $.8$ success probability in the first $5$ coordinates and $.2$ success probability in the last 5, exactly what was used to generate the first $250$ samples.  $\mu^{(2)}$ is exactly reversed, exactly what was used to generate the second $250$ samples.  These patterns were not present in the start $\theta$, which was chosen at random.  We've recovered the underlying  model!  Here, there is much more separation between the mixtures and more data than in the Hope Heights case.

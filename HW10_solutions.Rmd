@@ -1,0 +1,485 @@
+---
+title: "Homework 10"
+author: "Zijing Gao"
+output: pdf_document
+---
+
+```{r}
+library(dplyr, quietly = T)
+library(plyr, quietly = T)
+library(ggplot2, quietly = T)
+```
+
+
+
+# Problem 1
+
+Before beginning problem $1$, I'll generate the same die rolls I did in hw $9$.  See hw $9$ for the SampleCasino function. 
+
+```{r, echo=F}
+# this function samples arbitrary discrete state HMM
+# M is the transition matrix of the hidden chain (X(t))
+# g is a matrix, the ith column of g gives g_i(Y) - P(Y | X=i)
+SampleCasino <- function(M, g, start_X, time_steps)
+{
+  n <- nrow(M)
+  m <- nrow(g)
+  
+  # first simulate the hidden chain
+  X <- rep(0, time_steps)
+  X[1] <- start_X
+  for (i in 2:time_steps) 
+    X[i] <- sample.int(n, 1, prob=M[X[i-1],])
+  
+  # now sample the observed states
+  Y <- sapply(1:time_steps, function(t) {
+    X_state <- X[t]
+    sample.int(m, 1, prob=g[,X_state])
+  })
+    
+  return (list(X=X, Y=Y))
+}
+```
+
+```{r, cache=T}
+M <- matrix(c(.95, .05, .05, .95), byrow=T, nrow=2)
+g1 <- rep(1/6,6)
+g2 <- c(rep((1 - 1/50)/5, 5), 1/50)
+g <- matrix(c(g1, g2), ncol=2)
+
+set.seed(123456)
+XY_sample <- SampleCasino(M, g, start_X=1, time_steps=200)
+data_Y <- XY_sample$Y
+true_X <- XY_sample$X
+```
+
+
+## (a)
+
+In the derivation of the forward equation, we will repeatedly use the following conditional probability relation.
+\begin{equation} \label{CP}
+P(A, B \ | \ C) = P(A \ | \ B, C) P(B \ | \ C),
+\end{equation}
+where $A,B,C$ are probability events, e.g. $A = \{X(t)=j\}.  This relation follows from simple algebra and the definition of conditional probability,
+\begin{equation}
+P(A \ | \ B, C) P(B \ | \ C) =
+\left(\frac{P(A,B,C)}{P(B,C)}\right)
+\left(\frac{P(B,C)}{P(C)}\right)
+= \frac{P(A,B,C)}{P(C)}
+= P(A, B \ | \ C)
+\end{equation}
+
+Rather than repeat what I did in class, here I'll go through Murphy's derivation, but I'll switch the notation to that we've been using for the casino model.   We start with the definition of $\alpha_t(j)$, (17.45) in Murphy.
+\begin{equation}
+\alpha_t(j) = P(X(t)=j \ | \ Y(0), Y(1), \dots, Y(t)).
+\end{equation}
+
+To derive the forward iteration, we assume that we know $\alpha_{t-1}$ and we begin by computing the one-step ahead probability, (17.44) in Murphy.
+\begin{align}
+P(X(t)=j \ | \ Y(0), Y(1), \dots, Y(t-1))
+&= \sum_{i=1}^n P(X(t)=j, X(t-1)=i \ | \ Y(0), Y(1), \dots, Y(t-1))
+\\ \notag
+&= \sum_{i=1}^n P(X(t)=j \ | \ X(t-1)=i, Y(0), Y(1), \dots, Y(t-1))
+\\ \notag
+& \ \ \ \ \ \ \ \ \ \cdot
+ P(X(t-1)=i \ | \ Y(0), Y(1), \dots, Y(t-1)) \ \ \ \
+ \text{ by (\ref{CP})}
+ \\ \notag
+& = \sum_{i=1}^n P(X(t)=j \ | \ X(t-1)=i)
+P(X(t-1)=i \ | \ Y(0), Y(1), \dots, Y(t-1)) 
+\\ \notag
+& \ \ \ \ \ \ \ \ \ \ \ \
+ \text{ since X(t) depends only on X(t-1) by the Markov property}
+ \\ \notag
+ &
+ = \sum_{i=1}^n M_{ij} \alpha_{t-1}(i)
+\\ \notag
+& = (\alpha_{t-1} M)_j,
+\end{align}
+where we think of $\alpha_{t-1}$ as a n-dimensional row vector.
+
+Then, we can use the one-step probability to derive $\alpha_t$, (17.46) in Murphy.
+\begin{align}
+\alpha_t(j) & = P(X(t)=j \ | \ Y(0), Y(1), \dots, Y(t))
+\\ \notag
+& = \frac{P(Y(t), X(t)=j \ | \ Y(0), Y(1), \dots, Y(t-1))}
+{P(Y(t) \ | \ Y(0), Y(1), \dots, Y(t-1))}
+\ \ \ \ \ 
+\text{ by (\ref{CP}), just cross multiplied}
+\\ \notag
+& = \frac{P(Y(t), X(t)=j \ | \ Y(0), Y(1), \dots, Y(t-1))}
+{Z+t} \ \ \ \ \ \text{ since the denominator doesn't depend on j}
+\\ \notag
+& = \frac{P(Y(t), \ | \ X(t)=j , Y(0), Y(1), \dots, Y(t-1))
+P(X(t)=j \ | \ Y(0), Y(1), \dots, Y(t-1))}
+{Z_t} \ \ \ \ \ \text{ by (\ref{CP})}
+\\ \notag
+& = \frac{g_j(Y(t)) (\alpha_{t-1} M)_j}{Z_t}.
+\end{align}
+
+Since $\sum_{j=1}^n \alpha_t(j) = 1$, we can compute $Z_t$.  
+
+Lastly, we need to start the iteration with $\alpha_0$.  In hw $9$, we assumed that $X(0)$ is in the fair state.  So let's set the states $1$ and $2$ to fair and cheating, giving,
+\begin{equation}
+\alpha_0 = \left(
+\begin{array}{c}
+1 \\ 
+0
+\end{array}
+\right)
+\end{equation}
+
+```{r, cache=T}
+Forward <- function(Y, M, g)
+{
+  tM <- t(M)
+  
+  num_steps <- length(Y)
+  alpha <- matrix(0, nrow=2, ncol=num_steps)
+  # set \alpha_0
+  alpha[,1] <- c(1,0)
+  for (t in 2:num_steps) {
+    alpha_prev <- alpha[,t-1]
+    alpha[,t] <- (tM %*% alpha_prev) * g[Y[t],]
+    # apply Z_t normalization
+    alpha[,t] <- alpha[,t]/sum(alpha[,t])
+  }
+  
+  rownames(alpha) <- c("fair", "cheating")
+  return (alpha)
+}
+
+alpha <- Forward(data_Y, M, g)
+
+plot(alpha["cheating",], xlab="time step", ylab="P(X(t)=C|Y(0)..Y(t))", type="l",
+     ylim=c(0,1.2))
+points(which(data_Y==6), rep(1.1, length(which(data_Y==6))), col="green")
+points(true_X-1, col="red")
+```
+
+## (b)
+
+Let's start with the definition of $\beta_t(j)$, (17.51) in Murphy.
+\begin{equation}
+\beta_t(j) = P(Y(t+1), Y(t+2), \dots, Y(T) \ | \ X(t) = j).
+\end{equation}
+
+Assume we know $\beta_t$ and let's derive $\beta_{t-1}$, (17.54-17.58) in Murphy.
+\begin{align}
+\beta_{t-1}(j) & = P(Y(t), Y(t+1), \dots, Y(T) \ | \ X(t-1) = j)
+\ \ \ \ \ \text{ (17.54) in Murphy}
+\\ \notag
+& = \sum_{i=1}^n P(Y(t), Y(t+1), \dots, Y(T), X(t)=i \ | \ X(t-1) = j)
+\ \ \ \ \ \text{ (17.55) in Murphy}
+\\ \notag
+& = \sum_{i=1}^n 
+P(Y(t+1), \dots, Y(T) \ | \ X(t-1) = j, Y(t), X(t)=i)
+P(Y(t), X(t)=i \ | \ X(t-1) = j)
+\ \ \ \ \ \text{ by (\ref{CP})}
+\\ \notag
+& = \sum_{i=1}^n 
+P(Y(t+1), \dots, Y(T) \ | \ X(t)=i)
+P(Y(t), X(t)=i \ | \ X(t-1) = j)
+\\ \notag
+& \ \ \ \ \ \text{ since $Y(t+1),..,Y(T)$ depend only on $X(t)$ by Markov}
+\\ \notag
+& \ \ \ \ \ \text{ (17.56) in Murphy }
+\\ \notag
+& = \sum_{i=1}^n 
+P(Y(t+1), \dots, Y(T) \ | \ X(t)=i)
+P(Y(t) \ | \ X(t) = i)
+P(X(t)=i \ | \ X(t-1) = j)
+\\ \notag
+& \ \ \ \ \ \text{by (\ref{CP}) and since $Y(t)$ and $X(t)$ are CI given $X(t-1)$}
+\\ \notag
+& \ \ \ \ \ \text{ (17.57) in Murphy }
+\\ \notag
+& = 
+\sum_{i=1}^n \beta_t(i) g_i(Y(t)) M_{ji}
+\ \ \ \ \ \text{ (17.58) in Murphy }
+\\ \notag
+& = (M (\beta_t * g(Y(t))_j,
+\end{align}
+where by $\beta_t * g(Y(t))$ I mean the component-wise multiplication of two vectors.
+
+Finally, we need $\beta_200$ as a start.  This is a bit tricky because $\beta_200$ considers die rolls after time step $200$, which we don't have.  One way to approach this is to pretend that we fix the $201$st die rolls.  Then their probability doesn't depend on $X(200)$ and we'll get
+\begin{equation}
+\beta_{200} = \left(
+\begin{array}{c}
+1 \\ 
+1
+\end{array}
+\right)
+\end{equation}
+
+```{r, cache=T}
+Backward <- function(Y, M, g)
+{
+  num_steps <- length(Y)
+  beta <- matrix(0, nrow=2, ncol=num_steps)
+  # set \alpha_0
+  beta[,num_steps] <- c(1,1)
+  for (t in (num_steps-1):1) {
+    beta_prev <- beta[,t+1]
+    beta[,t] <- M %*% (beta_prev * g[Y[t],])
+  }
+  
+  rownames(beta) <- c("fair", "cheating")
+  return (beta) 
+}
+
+beta <- Backward(data_Y, M, g)
+# the beta is hard to interpret because it's the probability of future data,
+# given the curernt step which always collapses to 0 as we get more data.   
+# Here I'll just print log (beta) of the first 5 computations
+log(beta[,195:200])
+```
+
+## (c)
+
+The relation below is (\ref{CP}) with $A = \{X(t)=j\}$, $B = \{Y(t+1), \dots, Y(T)\}$,
+and $C=\{Y(0), \dots, Y(T)\}.
+\begin{equation}
+P(X(t)=j \ | \  Y(0), Y(1), \dots, Y(T)) =
+\frac{P(X(t), Y(t+1), \dots, Y(T) \ | \  Y(0), Y(1), \dots, Y(t))}
+{P( Y(t+1), \dots, Y(T) \ | \ Y(0), Y(1), \dots, Y(t))}
+\end{equation}
+The denominator above is a constant, call it $Z_t$, dependent only on $t$ and the data.   Then we can apply (\ref{CP}) to the numerator to find,
+\begin{align}
+P(X(t)=j \ | \  Y(0), \dots, Y(T)) & =
+\frac{P(X(t)=j \ | \  Y(0),  \dots, Y(t))
+P(Y(t+1), \dots, Y(T) \ | \  X(t)=j, Y(0), \dots, Y(t))}
+{Z_t}
+\\ \notag
+& =
+\frac{P(X(t)=j \ | \  Y(0), \dots, Y(t))
+P(Y(t+1), \dots, Y(T) \ | \  X(t)=j)}
+{Z_t}
+\\ \notag
+& \ \ \ \ \ \ \ \ \ \ \ \text{ by the Markov property}
+\\ \notag
+& = \frac{\alpha_t(j) \beta_t(j)}{Z_t},
+\end{align}
+and as before we can compute $Z_t$ by normalizing.
+
+
+```{r, cache=T}
+Smoothing <- function(Y, M, g)
+{
+  alpha <- Forward(Y, M, g)
+  beta <- Backward(Y, M, g)
+  
+  s <- apply(alpha*beta, 2, function(ab_column) ab_column/sum(ab_column))
+  rownames(s) <- rownames(alpha)
+  
+  return (s)
+}
+
+p <- Smoothing(data_Y, M, g)
+plot(p["cheating",], xlab="time step", ylab="P(X(t)=C|data)", type="l",
+     ylim=c(0,1.2))
+points(true_X-1, col="red")
+# put down die rolls of 6
+die_6 <- which(data_Y==6) 
+points(die_6, rep(1.1, length(die_6)), col="green")
+```
+
+As comparison, here is the figure produced in hw $9$ using MCMC.
+```{r, echo=FALSE, out.width = '100%'}
+knitr::include_graphics("hw9_smoothing.jpg")
+```
+
+The results are similar, but notice that the very small bumps around time step $120$ are missing in the MCMC.  Of course, the main difference is that using the forward/backward equations we can compute smoothing probabilities very quickly, in this case seconds, while MCMC methods require much longer, in this case hours.
+
+## (d)
+
+```{r,cache=T}
+HardAssign <- function(theta, Y, cheat_cutoff=0.5)
+{
+  M <- theta$M
+  g <- theta$g
+  
+  s <- Smoothing(Y, M, g)
+  X <- ifelse(s["cheating",] < cheat_cutoff, "C", "F")
+  
+  return (X)
+}
+
+Assign2theta <- function(X, Y)
+{
+  ns <- length(X)
+  nFC <- sum(X[-ns]=="F" & X[-1]=="C")
+  nCF <- sum(X[-ns]=="C" & X[-1]=="F")
+  nF <- sum(X[-1]=="F")
+  nC <- sum(X[-1]=="C")
+  
+  # if one of the transitions is missing, return NULL
+  if (nFC == 0 | nCF == 0)
+    return (NULL)
+  
+  M <- matrix(0, ncol=2, nrow=2)
+  M[1,] <- c(1 - nFC/nF, nFC/nF)
+  M[2,] <- c(nCF/nC, 1 - nCF/nC)
+  
+  
+  cheat_g <- table(Y[which(X=="C")])
+  fair_g <- rep(1/6, 6)
+  
+  g <- matrix(c(g1, g2), ncol=2)
+  
+  theta <- list(M=M, g=g)
+  return (theta)
+}
+
+EM <- function(start_theta, Y, iter=100, cheat_cutoff=0.5)
+{
+  theta <- start_theta
+  for (i in 1:iter) {
+    X <- HardAssign(theta, Y, cheat_cutoff=cheat_cutoff)
+    # check X to see if it is all the same value.
+    if (length(unique(X)) == 1) {
+      print("bad starting point!")
+      break
+    }
+    theta <- Assign2theta(X, Y)
+    if (is.null(theta)) {
+      print("bad starting point!")
+      break
+    }
+  }
+  
+  return (list(theta=theta, X=X))
+}
+```
+
+The EM iteration is almost always highly dependent on the starting value.   Bad starting values can lead to convergence to local optimum's reflecting poor fits.  Here, where I am doing a hard EM as opposed to a soft EM, this is even more true.
+
+As an initial guess for the cheating die probabilities, I use the sampled die rolls.  You can see from the samples that there are too few $6$'s!
+```{r}
+table(data_Y)
+start_cheat_g <- table(data_Y)/length(data_Y)
+start_cheat_g
+```
+
+A good initial guess for $M$ is harder because we don't see the $X(t)$.  I can try some random start values.  
+```{r,cache=T}
+start_g <- matrix(c(rep(1/6,6), start_cheat_g), ncol=2, nrow=6) 
+start_M <- matrix(runif(4), ncol=2, nrow=2)
+M[1,] <- M[1,]/sum(M[1,])
+M[2,] <- M[1,]/sum(M[2,])
+ 
+start_theta <- list(M=start_M, g=start_g)
+
+EM(start_theta, data_Y)
+```
+
+This iteration failed because it converged to $\theta$ for which all $X$ values were "F", except for the first.  Let's try again.
+```{r,cache=T}
+start_M <- matrix(runif(4), ncol=2, nrow=2)
+M[1,] <- M[1,]/sum(M[1,])
+M[2,] <- M[1,]/sum(M[2,])
+
+start_theta <- list(M=start_M, g=start_g)
+
+EM(start_theta, data_Y)
+```
+
+Here again the iteration failed to find a good fit.  Let's try something non-random.  One way to proceed would be to assume that there is some stickiness to the state, i.e. we stay in F or C for a while.  This makes sense under the model because if the casino sneaks in a cheating die for a single roll, there's no way we'll discover that.  So let's assume that at least $0.80$ of the time the chain stays put.
+```{r,cache=T}
+start_M <- matrix(c(.8, .2, .2, .8), ncol=2, nrow=2, byrow=T)
+start_theta <- list(M=start_M, g=start_g)
+start_theta
+
+theta <- EM(start_theta, data_Y)
+print(theta)
+```
+  
+This time we converged to a nice fit.   The die roll probabilities are exactly right.   The transition probabilities are close to the $0.95$, $0.05$ values.   One aspect I haven't explored is the cutoff for the hard assignment, i.e. at what probability do we assign cheat versus fair.   Being more or less aggressive with these assighments may be another way to find a good fit.   
+
+
+# Problem 2
+
+## (a)
+ 
+The entries of $\phi(X)$ match up with those of $\theta$.  The coordinate of $\theta$ corresponding to $\eta_i$ has the value $X_i$ in $\phi(X)$.  The coordinate of $\theta$ corresponding to $w_{ij}$ has the value $X_i X_j$ in $\phi(X)$.  
+
+## (b.i)
+\begin{align}
+P(X_j \ | \ X_{-j}, \theta)
+& = \frac{P(X_j, X_{-j} \ | \ \theta)}{P(X_{-j} \ | \ \theta)}
+\\ \notag
+& = \frac{\frac{1}{Z} \exp[\theta \cdot \phi(X)]}
+{\sum_{s=1}^n P(X_j=s, X_{-j} \ | \ \theta)}
+\\ \notag
+& = \frac{\frac{1}{Z} \exp[\theta \cdot \phi(X)]}
+{\sum_{s=1}^n \frac{1}{Z} \exp[\theta \cdot \phi(X^{(s)})]}.
+\end{align},
+where $X^{(s)}$ has the state $s$ in the $j$ coordinate and all other coordinates given by $X_{-j}$.  We can cancel out the $Z$ in the numerator and denominator and arrive at
+\begin{equation}
+P(X_j \ | \ X_{-j}, \theta) = \frac{\exp[\theta \cdot \phi(X)]}
+{Z'},
+\end{equation}
+where
+\begin{equation}
+Z' = \sum_{s=1}^n  \exp[\theta \cdot \phi(X^{(s)})]
+\end{equation}
+
+## (b.ii)
+
+\begin{align}
+\frac{1}{Z'} \frac{\partial Z'}{\partial \theta_k}
+& = \frac{1}{Z'}  \sum_{s=1}^n \frac{\partial}{\partial \theta_k} \exp[\theta \cdot \phi(X^{(s)})]
+\\ \notag
+&= \frac{1}{Z'}  \sum_{s=1}^n \phi(X^{(s)})_k \exp[\theta \cdot \phi(X^{(s)})]
+\\ \notag
+&= \sum_{s=1}^n \phi(X^{(s)})_k \left[\frac{1}{Z'}  \exp[\theta \cdot \phi(X^{(s)})] \right]
+\\ \notag
+&= \sum_{s=1}^n \phi(X^{(s)})_k P(X_j = s \ | \ X_{-j}, \theta)
+\\ \notag
+& = E[\phi(X)_k  \ | \ X_{-j}, \theta]
+\end{align}
+
+## (b.iii)
+
+Instead of considering the whole gradient, let's consider a single partial.
+\begin{align}
+\frac{\partial}{\partial \theta_k}\log P(X_j \ | \ X_{-j}, \theta)
+& = \frac{\partial }{\partial \theta_k} \log \frac{\exp[\theta \cdot \phi(X)]}{Z'}
+\\ \notag
+& = \frac{\partial }{\partial \theta_k} \left(\theta \cdot \phi(X) - \log(Z')) \right)
+\\ \notag
+& = \phi(X)_k - \frac{1}{Z'} \frac{\partial Z'}{\partial \theta_k}
+\\ \notag
+& = \phi(X)_k - E[\phi(X)_k  \ | \ X_{-j}, \theta]
+\end{align}
+
+## (c)
+
+\begin{align}
+\nabla p(\theta) = \sum_{i=1}^N \frac{1}{n} \sum_{j=1}^n \nabla \log P (X^{(i)}_j \ | \ X^{(i)}_{-j}, \theta)
+& = \sum_{i=1}^N \frac{1}{n} \sum_{j=1}^n
+\left(\phi(X^{i)}) - E[\phi(X^{(i)})_k  \ | \ X^{(i)}_{-j}, \theta]) \right)
+\\ \notag
+& = \sum_{i=1}^N
+\phi(X^{i)}) - \sum_{i=1}^N \frac{1}{n} \sum_{j=1}^n
+E[\phi(X^{(i)})_k  \ | \ X^{(i)}_{-j}, \theta])
+\end{align}
+<!-- \nabla p(\theta) = \sum_{i=1}^N \frac{1}{n} \sum_{j=1}^n \nabla \log P (X^{(i)}_j \ | \ X^{(i)}_{-j}, \theta) -->
+<!-- & = \sum_{i=1}^N \frac{1}{n} \sum_{j=1}^n -->
+<!-- \left(\phi(X^{i)}) - E[\phi(X^{(i)})_k  \ | \ X^{(i)}_{-j}, \theta]) \right) -->
+<!-- & = \sum_{i=1}^N  -->
+<!-- \left(\phi(X^{i)}) - \sum_{i=1}^N \frac{1}{n} \sum_{j=1}^n -->
+<!-- E[\phi(X^{(i)})_k  \ | \ X^{(i)}_{-j}, \theta]) -->
+
+(d)
+
+Here is assume $n$ states rather than $2$, so the result is a sum of $n$ terms.  
+\begin{equation}
+E[f(X) \ | \  X_{-j}, \theta]
+= \sum_{s=1}^n f(X^{(s)}) P(X_j=s \ | \ X_{-j}),
+\end{equation}
+where as before $X^{(s)}$ has the state $s$ in the $j$ coordinate and all other coordinates given by $X_{-j}$. Plugging in for the conditional probability,
+\begin{equation}
+E[f(X) \ | \  X_{-j}, \theta]
+= \sum_{s=1}^n f(X^{(s)}) \frac{1}{Z'} exp[\theta \cdot \phi(X^{(s)})].
+\end{equation}

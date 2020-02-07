@@ -1,0 +1,436 @@
+---
+title: "Homework 5"
+author: "Zijing Gao"
+output: pdf_document
+---
+
+# Problem 1
+
+```{r}
+library(dplyr, quietly = T)
+library(plyr, quietly = T)
+library(ggplot2, quietly = T)
+```
+
+## (a)
+
+Below I plot 100 of the $X$ samples.  When I wrote the homework, I forget that \textbf{matplot} will plot the columns of a matrix.  That's easier than using plot.
+```{r, cache=T}
+X <- read.csv("TimeSeries.csv", header=T)
+matplot(t(X[1:100,]), type="l", col="black", lty=1)
+```
+
+By eye, the pattern cannot be distinguished.  But here are the underlying patterns, which can be distinguished by eye.
+```{r, cache=T}
+true_mu <- read.csv("BaseSeries.csv", header=T) %>% as.matrix
+show_patterns  <- function(m)
+{
+  tb <- plyr::adply(1:nrow(m), 1, function(i) {
+    m_row <- m[i,]
+    data.frame(x=1:length(m_row), y=m_row, pattern=i)
+  })
+  
+  return (tb)
+}
+
+tb <- show_patterns(true_mu)
+g <- ggplot(data=tb) + geom_line(aes(x=x, y=y)) + facet_wrap("pattern", nrow=2, ncol=2)
+print(g)
+```
+
+## (b) 
+
+Sorry, nothing to do here!
+
+## (c)
+
+I'll just show how to find the mean MLE.  If you have questions involving the derivation of the variance MLE as shown in Murphy, please see me.
+
+\begin{equation}
+\ell(\mu) = \sum_{i=1}^N \log P(Z^{(i)} \ | \ \mu, \Sigma)
+= \sum_{i=1}^N \log \left(\frac{1}{\sqrt{(2\pi)^n \text{det}\Sigma}} 
+\exp[\frac{-(Z^{(i)}-\mu)^T \Sigma^{-1} (Z^{(i)}-\mu)}{2}] \right) 
+\end{equation}
+
+The only part of the pdf that depends on $\mu$ is the exponential, so we can simplify,
+\begin{equation}
+\nabla \ell(\mu) = \nabla
+\sum_{i=1}^N \log \left(
+\exp[-\frac{(Z^{(i)}-\mu)^T \Sigma^{-1} (Z^{(i)}-\mu)}{2}] \right) 
+= -\sum_{i=1}^N  \nabla \frac{(Z^{(i)}-\mu)^T \Sigma^{-1} (Z^{(i)}-\mu)}{2}
+\end{equation}
+
+Consider a single partial with respect to $\mu_j$.  By product rule we have
+\begin{equation}
+\frac{\partial}{\partial \mu_j} \left(
+(Z^{(i)}-\mu)^T \Sigma^{-1} (Z^{(i)}-\mu) \right)
+= \left(\frac{\partial}{\partial \mu_j} 
+(Z^{(i)}-\mu)^T \right) \Sigma^{-1} (Z^{(i)}-\mu) 
++ 
+(Z^{(i)}-\mu)^T \Sigma^{-1} \left( \frac{\partial}{\partial \mu_j}(Z^{(i)}-\mu) \right).
+\end{equation}
+
+Then letting $e^{(j)}$ be the vector with all coordinates equal to $0$ except for the $j$th coordinate, which is equal to $1$, notice that
+\begin{equation}
+\frac{\partial}{\partial \mu_j} 
+(Z^{(i)}-\mu)^T = -(e^{(j)})^T
+\end{equation}
+and
+\begin{equation}
+\frac{\partial}{\partial \mu_j}(Z^{(i)}-\mu) = -e^{(j)}
+\end{equation}
+Plugging back in above, we have
+\begin{equation}
+\frac{\partial}{\partial \mu_j} \ell(\mu) = -\sum_{i=1}^N 
+(e^{(j)})^T \Sigma^{-1} (Z^{(i)}-\mu) 
++ 
+(Z^{(i)}-\mu)^T \Sigma^{-1} e^{(j)}
+= -2 \sum_{i=1}^N (Z^{(i)}-\mu)^T \Sigma^{-1} e^{(j)}
+\end{equation}
+where the two summands involving $e^{(j)}$ are equal because $\Sigma$ and hence $\Sigma^{-1}$ are symmetric.
+
+We therefore need $\mu$ that satisfies
+\begin{equation}
+\sum_{i=1}^N (Z^{(i)}-\mu)^T \Sigma^{-1} e^{(j)} = 0,
+\end{equation}
+for all $j$.  $\sum_{i=1}^N (Z^{(i)}-\mu)^T \Sigma^{-1}$ is a row vector, and we require that its dot product againt  $e^{(j)}$ over all $j$ is $0$.  But this can only occur if the vector is $0$.
+\begin{equation}
+\sum_{i=1}^N (Z^{(i)}-\mu)^T \Sigma^{-1}= 0,
+\end{equation}
+Now multiply both sides by $\Sigma$,
+\begin{equation}
+\sum_{i=1}^N (Z^{(i)}-\mu) = 0,
+\end{equation}
+and solve for $\mu$ to find
+\begin{equation}
+\mu = \frac{1}{N} \sum_{i=1}^N Z^{(i)}.
+\end{equation}
+
+
+## (d)
+
+Following our disucssion in class, I assumed the less paramaterized model,
+\begin{equation}
+X = \bigg\{
+\begin{array}{cc}
+\mathcal{N}(\mu^{(1)}, \sigma_1^2 I) & \text{ with probability } p_1 \\
+\mathcal{N}(\mu^{(2)}, \sigma_2^2 I) & \text{ with probability } p_2\\
+\mathcal{N}(\mu^{(3)}, \sigma_3^2 I) & \text{ with probability } p_3\\
+\mathcal{N}(\mu^{(4)}, \sigma_4^2 I) & \text{ with probability } p_4.
+\end{array}
+\end{equation}
+
+Letting $z_i$ be the mixture from which $X^{(i)}$ was drawn, as before we define,
+\begin{align}
+r_{ij} & = \frac{P(z_i=j, X^{(i)} \ | \ \theta)}{P(X^{(i)} \ | \ \theta)}
+= \frac{p_j \mathcal{N}(X^{(i)} \ | \ \mu^{(j)}, \sigma_j^2 I)}
+        {\sum_{k=1}^4 p_k \mathcal{N}(X^{(i)} \ | \ \mu^{(k)}, \sigma_k^2 I)}
+\end{align}
+
+A hard EM assigns each $X^{(i)}$ to the mixture with greatest $r_{ij}$ over $j=1,2,3,4$.  Let $a_i = \text{argmax}_j r_{ij}$, meaning that $a_i$ is the mixture to which we assign $X^{(i)}$.  Then, we recompute the $\mu$ and $\sigma$'s to optimize the log-likelihood of the assigned samples.  For example, consider mixture $1$.  Let $\mathcal{A}_1$ be the indices of the sampels assigned to mixture $1$.  Then, we maximize
+
+<!-- \ell(\mu', \sigma_1^2') = \sum_{i \in \mathcal{A}_i} -->
+<!-- \log(N}(X^{(i)} \ | \ \mu^{(1)}, \sigma_1^2 I) ) -->
+\begin{equation}
+\ell(\mu', \sigma_1^{2'}) =  \sum_{i \in \mathcal{A}_i} 
+\log(\mathcal{N}(X^{(i)} \ | \ \mu', \sigma_1^{2'} I) )
+\end{equation}
+
+
+Writing out the pdf of the multivariate normal and taking the gradient and setting to $0$, as we did in previous homeworks, gives the updates
+\begin{equation}
+\mu' = \frac{1}{|\mathcal{A}_1|} \sum_{i \in \mathcal{A}_1} X^{(i)}
+\end{equation}
+and
+\begin{equation}
+\sigma_1^{2'} = \frac{1}{\mathcal{A}_1} \sum_{i \in \mathcal{A}_1} \|X^{(i)} - \mu'\|^2,
+\end{equation}
+and $p_1 = |\mathcal{A}_1|/N$.  The other mixtures are updated analagously.
+
+Below is the code I use for (d) and (e) since the hard and soft updates naturally relate to each other.
+```{r,cache=T}
+# Update theta give the r matrix
+theta_from_assignments <- function(X, r)
+{
+  K <- ncol(r)
+  N <- nrow(X)
+  
+  theta <- lapply(1:K, function(i) {
+    ri <- r[,i]
+    p_i <- sum(ri)/N
+    
+    ri <- ri/sum(ri)
+    weighted_X <- X * ri
+    mu_i <- colSums(weighted_X)
+    
+    weighted_VX <- t((t(X) - mu_i)^2) * ri
+    sigma2_i <- weighted_VX %>% colSums %>% mean
+    
+    return (list(mu=mu_i, sigma2=sigma2_i, p=p_i))
+  })
+  
+  return (theta)
+}
+
+# X is assumed to be a matrix and
+# the MVN density for each row is returned
+# as a vector
+dMVN <- function(X, mu, sigma2)
+{
+  N <- nrow(X)
+  n <- ncol(X)
+  sd <- sqrt(sigma2)
+  
+  # here I cheat because I know the Sigma is diaganol
+  # so I just use dnorm down the columns of X
+  fx <- matrix(0, nrow=N, ncol=n)
+  for (i in 1:n) 
+    fx[,i] <- dnorm(X[,i], mean=mu[i], sd=sd)
+  
+  # multiply across rows
+  probs <- apply(fx, 1, prod)
+  return (probs)
+}
+
+compute_soft_r <- function(theta, X)
+{
+  r <- sapply(theta, function(mixture_theta) {
+    mu <- mixture_theta$mu
+    sigma2 <- mixture_theta$sigma2
+    p <- mixture_theta$p
+    
+    return (p*dMVN(X, mu, sigma2))
+  })
+  
+  # notice I never have to compute the denominator
+  # of p(zi,Xi)/p(Xi)  if I just rescale each row to sum to 1
+  r <- apply(r, 1, function(rr) rr/sum(rr)) %>% t
+  
+  return (r)
+}
+  
+compute_hard_r <- function(theta, X)
+{
+  N <- nrow(X)
+  K <- length(theta)
+  
+  r <- compute_soft_r(theta, X)
+  
+  hard_assignment <- apply(r, 1, which.max)
+  hard_r <- matrix(0, nrow=N, ncol=K)
+  for (i in 1:N)
+    hard_r[i,hard_assignment[i]] <- 1
+  
+  return (hard_r)
+}
+
+logL <- function(theta, X)
+{
+  N <- nrow(X)
+  K <- length(theta)
+  
+  # P_ij = P(zi=j, Xi | theta)
+  P <- matrix(0, nrow=N, ncol=K)
+  for (j in 1:K) {
+    mu <- theta[[j]]$mu
+    sigma2 <- theta[[j]]$sigma2
+    p <- theta[[j]]$p
+    
+    P[,j] <- p*dMVN(X, mu, sigma2)
+  }
+  
+  logL <- rowSums(P) %>% log %>% sum
+  return (logL)
+}
+```
+
+Now let's run a hard EM.  I compute a starting theta by randomly assigning points to $4$ mixtures and computing the resultant optimal theta.
+```{r,cache=T}
+random_start_theta <- function(X, K=4)
+{
+  N <- nrow(X)
+  assignments <- sample.int(K, N, replace=T)
+
+  r <- matrix(0, nrow=N, ncol=K)
+  for (i in 1:N)
+    r[i,assignments[i]] <- 1
+
+  return (theta_from_assignments(X, r))
+}
+
+
+hard_EM <- function(start_theta, X)
+{
+  theta <- start_theta
+  likeli <- logL(theta, X)
+  prev_likeli <- Inf
+  while (abs(likeli - prev_likeli) > 1E-2) {
+    cat("likeli", likeli, "\n")
+ 
+    r <- compute_hard_r(theta, X)
+    theta <- theta_from_assignments(X, r)
+    
+    prev_likeli <- likeli
+    likeli <- logL(theta, X)
+  }
+  
+  return (theta)
+}
+
+start_theta <- random_start_theta(X, K=4)
+hard_theta <- hard_EM(start_theta, X)
+```
+
+The likelihood is strictly increasing, although that is not always true for hard EM.  Now let's take a look at the theta's compared to the true thetas.
+```{r, cache=T}
+# While computing it's easier to keep each mixture theta separate, 
+# but now I want to combine mu, p, sigma across the mixtures
+pretty_theta <- function(theta)
+{
+  K <- length(theta)
+  
+  # order mixtures by increasing p
+  p <- sapply(theta, "[[", 'p')
+  theta <- theta[order(p)]
+  
+  mu <- sapply(theta, "[[", 'mu') %>% t
+  sigma2 <- sapply(theta, "[[", 'sigma2')
+  p <- sapply(theta, "[[", 'p')
+  
+  return (list(mu=mu, sigma2=sigma2, p=p))
+}
+
+show_patterns  <- function(m)
+{
+  tb <- plyr::adply(1:nrow(m), 1, function(i) {
+    m_row <- m[i,]
+    data.frame(x=1:length(m_row), y=m_row, pattern=i)
+  })
+  
+  return (tb)
+}
+
+pretty_hard_theta <- pretty_theta(hard_theta)
+pred_mu <- pretty_hard_theta$mu
+true_mu <- read.csv("BaseSeries.csv", header=T) %>% as.matrix
+
+tb_mu_true <- show_patterns(true_mu) %>% dplyr::mutate(type="true")
+tb_mu_pred <- show_patterns(pred_mu) %>% dplyr::mutate(type="prediction")
+g <- ggplot(data=rbind(tb_mu_true, tb_mu_pred)) + 
+      geom_line(aes(x=x, y=y)) + facet_grid(pattern ~ type)
+print(g)
+```
+
+We almost exactly recover the time series! Now let's look at the $p$
+```{r}
+true_p <- 1:4/sum(1:4)
+true_p
+pred_p <- pretty_hard_theta$p
+pred_p
+```
+
+We recoved the probabilities with fairly good accuracy.  
+```{r}
+# looking at the code used to generate X
+true_sigma2 <- rep(4,4)
+true_sigma2
+pred_sigma2 <- pretty_hard_theta$sigma2
+pred_sigma2
+```
+
+And we recover the variance with fairly good accuracy.
+
+# (d)
+
+For a soft EM approach, we allow the $r_{ij}$ to represent partial assignments.  Then the updates for mixture $1$ generalize as follows,
+\begin{equation}
+\mu' = \frac{1}{\sum_{i=1}^N r_{i1}} \sum_{i=1}^N r_{i1} X^{(i)}
+\end{equation}
+and
+\begin{equation}
+\sigma_1^{2'} = \frac{1}{\sum_{i=1}^N r_{i1}} \sum_{i=1}^N r_{i1} \|X^{(i)} - \mu'\|^2,
+\end{equation}
+and $p_1 = \sum_{i=1}^N r_{i1}/N$.
+
+Now using soft EM (see above for some of the relevant code)
+```{r, cache=T}
+soft_EM <- function(start_theta, X)
+{
+  theta <- start_theta
+  likeli <- logL(theta, X)
+  prev_likeli <- Inf
+  while (abs(likeli - prev_likeli) > 1E-2) {
+    cat("likeli", likeli, "\n")
+ 
+    r <- compute_soft_r(theta, X)
+    theta <- theta_from_assignments(X, r)
+    
+    prev_likeli <- likeli
+    likeli <- logL(theta, X)
+  }
+  
+  return (theta)
+}
+
+# I'll use the same start theta as for hard EM
+soft_theta <- soft_EM(start_theta, X)
+```
+
+The likelihood is strictly increasing, which is always true for soft EM.  Now let's take a look at the theta's compared to the true thetas.
+```{r, cache=T}
+# While computing it's easier to keep each mixture theta separate, 
+# but now I want to combine mu, p, sigma across the mixtures
+pretty_theta <- function(theta)
+{
+  K <- length(theta)
+  
+  # order mixtures by increasing p
+  p <- sapply(theta, "[[", 'p')
+  theta <- theta[order(p)]
+  
+  mu <- sapply(theta, "[[", 'mu') %>% t
+  sigma2 <- sapply(theta, "[[", 'sigma2')
+  p <- sapply(theta, "[[", 'p')
+  
+  return (list(mu=mu, sigma2=sigma2, p=p))
+}
+
+show_patterns  <- function(m)
+{
+  tb <- plyr::adply(1:nrow(m), 1, function(i) {
+    m_row <- m[i,]
+    data.frame(x=1:length(m_row), y=m_row, pattern=i)
+  })
+  
+  return (tb)
+}
+
+pretty_soft_theta <- pretty_theta(soft_theta)
+pred_mu <- pretty_soft_theta$mu
+true_mu <- read.csv("BaseSeries.csv", header=T) %>% as.matrix
+
+tb_mu_true <- show_patterns(true_mu) %>% dplyr::mutate(type="true")
+tb_mu_pred <- show_patterns(pred_mu) %>% dplyr::mutate(type="prediction")
+g <- ggplot(data=rbind(tb_mu_true, tb_mu_pred)) + 
+      geom_line(aes(x=x, y=y)) + facet_grid(pattern ~ type)
+print(g)
+```
+
+We almost exactly recover the time series! Now let's look at the $p$
+```{r}
+true_p <- 1:4/sum(1:4)
+true_p
+pred_p <- pretty_soft_theta$p
+pred_p
+```
+
+We recoved the probabilities with fairly good accuracy.  
+```{r}
+# looking at the code used to generate X
+true_sigma2 <- rep(4,4)
+true_sigma2
+pred_sigma2 <- pretty_soft_theta$sigma2
+pred_sigma2
+```
+
+And we recover the variance with fairly good accuracy.  Notice there isn't much difference between soft and hard EM.

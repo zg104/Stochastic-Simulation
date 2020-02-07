@@ -1,0 +1,165 @@
+---
+title: "Homework 1"
+author: "Zijing Gao"
+output: pdf_document
+---
+
+# Problem 1
+
+## (a,b)
+
+See attached pdf.
+
+## (c)
+
+The function \textbf{SampleQueue} samples arrival, departure, and waiting times for the queue model. 
+
+```{r}
+#' Sample a queue by returning arrival, departure and waiting times
+#' @param lambda rate of interarrivals
+#' @param mu rate of service
+#' @param n number of customers to sample
+#' @param t end time
+#'
+#' @details Exactly one of n and t must be non-null.
+#'
+#' @returns a list of numeric.vectors names arrivals, departures, waits
+SampleQueue <- function(lambda, mu, n=NULL, t=NULL)
+{
+  if (is.null(n) & is.null(t))
+    stop("One of n and t must be non-null")
+
+  if (!is.null(n) & !is.null(t))
+    stop("One of n and t must be null")
+
+  # if time has been specified, we draw interarrivals until n people have arrived
+  if (is.null(n)) {
+    guess_n <- round(t)/lambda
+    interarrivals <- rexp(guess_n, rate=lambda)
+    while(sum(interarrivals) < t)
+      interarrivals <- c(interarrivals, rexp(guess_n, rate=lambda))
+
+    # we may have gone far beyond t
+    n <- min(which(cumsum(interarrivals) > t))
+    interarrivals <- interarrivals[1:n]
+  } else
+    interarrivals <- rexp(n, rate=lambda)
+
+  services <- rexp(n, rate=mu)
+
+  # now compute arrivals, departures, and waits
+  arrivals <- cumsum(interarrivals)
+  waits <- rep(0, n)
+  departures <- rep(0, n)
+  departures[1] <- arrivals[1] + services[1]
+  for (i in 2:n) {
+    waits[i] <- max(0, departures[i-1] - arrivals[i])
+    departures[i] <- arrivals[i] + waits[i] + services[i]
+  }
+
+  return (list(arrivals=arrivals,
+               departures=departures,
+               waits=waits))
+}
+```
+
+Here's the waiting times function.
+
+```{r, cache=T}
+WaitingTimes <- function(n, lambda, mu)
+{
+  return (SampleQueue(lambda, mu, n=n)$waits)
+}
+
+# first sample
+WaitingTimes(n=10, lambda=1, mu=1)
+# second sample
+WaitingTimes(n=10, lambda=1, mu=1)
+```
+
+## (d)
+
+```{r, cache=T}
+library(dplyr)
+PlotQueue <- function(t, lambda, mu)
+{
+  sq <- SampleQueue(lambda, mu, t=t)
+  arrivals <- sq$arrivals
+  departures <- sq$departures
+
+
+
+  # Create a data.frames of times and the increment to Q(t).
+  plot_d <- data.frame(time=c(arrivals,
+                              departures),
+                       increment=c(rep(1, length(arrivals)),
+                                   rep(-1, length(departures)))) %>%
+            dplyr::arrange(time)
+
+  times <- plot_d$time
+  increments <- plot_d$increment
+
+  # go through and plot point by point
+  # might be a little slow, but the code is simple
+  m <- matrix(rep(0, 6), nrow=3)
+  rownames(m) <- c("current_point", "next_point", "next_next_point")
+  colnames(m) <- c("time", "Q")
+
+  # initialize plot
+  plot(c(0,0),c(0,0), xlim=c(0, t), ylim=c(0, max(cumsum(increments))), type="l",
+       xlab="time", ylab="Q(t)")
+  # fill in steps
+  for (i in 1:nrow(plot_d)) {
+    m["next_point",] <- c(times[i], m["current_point", "Q"])
+    m["next_next_point",] <- c(times[i], m["current_point", "Q"] + increments[i])
+
+    lines(m[,"time"], m[,"Q"])
+    m["current_point",] <- m["next_next_point",]
+  }
+}
+
+# show plot and the data.frame define in PlotQueueu
+PlotQueue(20, 1, 1)
+```
+
+
+## (e)
+
+```{r, cache=T}
+lambda <- 1
+mu <- 1
+c <- 1
+
+# Here's the formula from (a)
+true_W2 <- lambda/(mu+lambda)*exp(-mu*c)
+print(true_W2)
+
+# Monte Carlo
+n_samples <- 10000
+total <- 0
+for (i in 1:n_samples) {
+  wt <- WaitingTimes(n=2, lambda=lambda, mu=mu)[2]
+  total <- total + as.numeric(wt > c)
+}
+estimate_W2 <- total/n_samples
+print(estimate_W2)
+```
+
+The estimate is correct to two digits. Now let's estimate $P(W_{100} > 1)$
+
+```{r, cache=T}
+lambda <- 1
+mu <- 1
+c <- 1
+
+# Monte Carlo
+n_samples <- 10000
+total <- 0
+for (i in 1:n_samples) {
+  wt <- WaitingTimes(n=100, lambda=lambda, mu=mu)[100]
+  total <- total + as.numeric(wt > c)
+}
+estimate_W2 <- total/n_samples
+print(estimate_W2)
+```
+

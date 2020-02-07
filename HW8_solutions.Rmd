@@ -1,0 +1,299 @@
+---
+title: "Homework 8"
+author: "Zijing Gao"
+output: pdf_document
+---
+
+```{r}
+library(dplyr, quietly = T)
+library(plyr, quietly = T)
+library(ggplot2, quietly = T)
+```
+
+# Problem 1
+
+
+## (a)
+
+In general, if $f(y,z)$ is a pdf/pmf for $Y$ and $Z$, then $Y$ and $Z$ are independent iff. $f(y,z)=g(y)h(z)$ for some functions $g, h$.  This will also hold for the conditional probability given $x$ because a conditional probability is a probability.    With this in mind, we can factor the conditional probability as follows, 
+\begin{align}
+P(Y, Z \ | \ X=x) & =\frac{\alpha \exp[\eta_1x + \eta_2Y + \eta_3Z - w_{12} xY - w_{13} xZ]}{P(X=x)} 
+\\ \notag
+& = \left[\frac{\alpha \exp[\eta_1x]}{P(X=x)} \exp[\eta_2Y - w_{12} xY \right]
+\left[
+\exp[\eta_3Z - w_{13} xZ] \right]
+\end{align}
+The term in the first and second bracket serve as $g(y)$ and $h(z)$, respectively.  We can similarly split $P(X, Y, Z)$ into its Hammersley-Clifford factorization
+\begin{align}
+P(Y, Z, X) &  = \left[\alpha \exp[\eta_1X + \eta_2Y - w_{12} XY \right]
+\left[
+\exp[\eta_3Z - w_{13} XZ] \right]
+= \psi_1(X, Y) \psi_2(X, Z).
+\end{align}
+Notice that the factorization is not unique because we could have put $\alpha \exp[\eta_1 X]$ into $\psi_2$ rather than $\psi_1$.
+
+The cliques here are $X,Y$ and $X,Z$.
+
+## (b)
+
+Both (2) and (3) are symmetric in $X,Y,Z$, so let's show that $X,Y$ are not conditionally independent given $Z$.   For (2), the problem is the term $\exp[w_{12}XY]$.  Suppose we had $\exp[w_{12}XY]=g(X)h(Y)$.  Then,
+\begin{equation}
+\log g(X) + \log h(Y) = w_{12} X Y
+\end{equation}
+Taking a derivative in $X$ gives $\log h(Y) = w_{12} Y$, making $h(Y) = exp[w_{12} Y]$ and similary $g(X) = \exp[w_{12} X]$, but then we can check that $\exp[w_{12}XY] \ne g(X)h(Y)$, contradicting our original assumption that we could factorize $\exp[w_{12}XY]$.
+
+Essentially the same argument holds for (3).
+
+## (c)
+
+First let's write down $P(X,Y)$,
+\begin{align}
+P(X,Y) & = \sum_{z=0}^1 
+\alpha \exp[\eta_1X + \eta_2Y + \eta_3z - w_{12} XY - w_{13} Xz]
+\end{align}
+
+### (c.i)
+
+If $w_{12} \to \infty$, the $P(X=1, Y=1) \to 0$.  All four combinations are given by,
+\begin{align}
+P(X=0, Y=1) 
+&= \alpha \exp[\eta_2] (1 + \exp[\eta_3])
+\\ \notag
+P(X=1, Y=0) 
+&= \alpha \exp[\eta_1] (1 + \exp[\eta_3 - w_{13}])
+\\ \notag
+P(X=0, Y=0) & = 2\alpha
+\\ \notag
+P(X=1, Y=1) & = 0
+\end{align}
+
+In this case we can easily compute $\alpha$ as
+\begin{equation}
+\alpha = \frac{1}{\exp[\eta_2] (1 + \exp[\eta_3])
++ \exp[\eta_1] (1 + \exp[\eta_3 - w_{13}]) + 2}
+\end{equation}
+
+### (c.ii)
+If $w_{12} \to -\infty$ then $P(X=1, Y=1) \to 1$ and all other possibilities have probability $0$.
+
+### (c.iii)
+
+Notice that in this case $X$ and $Y$ are  independent because the $w_{12}XY$ term is gone.  (Notice we can know write $P(X,Y,Z)=P(X,Z)P(Y)$. We can write $P(Y)$ in terms of a normalizing constant $\beta$,
+\begin{equation}
+P(Y) = \beta \exp[\eta_2 Y],
+\end{equation}
+and then we have $Y$ as a bernoulli r.v. with success probability $p_y$, where
+\begin{equation}
+p_y = \frac{\exp[\eta_2]}{1 + \exp[\eta_2]}
+\end{equation}
+
+Similarly,
+\begin{equation}
+P(X) = \sum_{z=0}^1 \gamma \exp[\eta_1 X + \eta_3 z - w_{13} Xz],
+\end{equation}
+giving $X$ as a bernoulli r.v with success probability $p_x$, where
+\begin{equation}
+p_x = \frac{
+\sum_{z=0}^1  \exp[\eta_1 + \eta_3 z - w_{13} z]
+}{
+\sum_{x=0}^1 \sum_{z=0}^1 \exp[\eta_1 x + \eta_3 z - w_{13} xz]
+}
+\end{equation}
+
+Putting this together we have,
+\begin{align}
+P(X=0, Y=1) 
+&= (1-p_x)p_y
+\\ \notag
+P(X=1, Y=0) 
+&= p_x(1 - p_y)
+\\ \notag
+P(X=0, Y=0) & = (1 - p_x)(1 - p_y)
+\\ \notag
+P(X=1, Y=1) & = p_x p_y
+\end{align}
+
+## (d)
+
+```{r, cache=T}
+# Note: This leaves out \alpha, so we compute
+# values proportional to the stationary distribution
+stationary_dist <- function(XYZ, theta)
+{
+  eta <- theta$eta
+  W <- theta$W
+  
+  prob <- exp(sum(eta*XYZ) - t(XYZ) %*% W %*% XYZ)
+  return (as.numeric(prob))
+}
+
+MH <- function(start_XYZ, theta, time_steps)
+{
+  XYZ <- start_XYZ
+  n <- length(XYZ)
+  path_m <- matrix(0, nrow=time_steps, ncol=n)
+  
+  for (i in 1:time_steps) {
+    path_m[i,] <- XYZ
+    
+    # construct proposal
+    p_XYZ <- XYZ
+    flip_ind <- sample.int(n, 1)
+    p_XYZ[flip_ind] <- 1 - p_XYZ[flip_ind]
+    
+    # accept-reject (proposal is symmetric so is left out of MH ratio)
+    MH_ratio <- stationary_dist(p_XYZ, theta)/stationary_dist(XYZ, theta)
+    if (runif(1) < MH_ratio)
+      XYZ <- p_XYZ
+  }
+  
+  colnames(path_m) <- c("X", "Y", "Z")
+  
+  return(path_m)
+}
+
+# make theta
+theta <- list(eta=rep(1/2,3),
+              W=matrix(c(0, 1, -1,
+                         0, 0, 0,
+                         0, 0, 0), byrow=T, nrow=3))
+start_XYZ <- c(0,0,0)
+theta
+
+# test the MH chain
+MH(start_XYZ, theta, 5)
+```
+
+Now I'll run the chain a while and throw out a burning time.  Here, we should do some testing to try and find the mixing time, but the problem is so small, I'll just throw out the first $1000$ steps and be quite confident that the burn-in time is long enough.
+
+```{r,cache=T}
+time_steps <- 1E5
+MH_sample <- MH(start_XYZ, theta, time_steps)
+# drop burn-in
+MH_sample <- MH_sample[1000:time_steps,]
+
+# now estimate expectations involved in correlation
+# E[X]
+Xhat <- MH_sample[,"X"]
+Yhat <- MH_sample[,"Y"]
+
+EX <- mean(Xhat)
+EY <- mean(Yhat)
+covXY <- mean((Xhat - EX)*(Yhat - EY))
+vX <- mean((Xhat-EX)^2)
+vY <- mean((Yhat - EY)^2)
+
+# and here's the correlation...
+cor <- covXY/sqrt(vX*vY)
+cor
+```
+
+# Problem 2
+
+## (a)
+
+```{r, cache=T}
+# I took this from hw 6, it computes
+# the MH transition matrix given the 
+# proposal matrix R and stationary distribution 
+# v
+MH_TPM <- function(R, v)
+{
+  n <- nrow(R)
+  M <- matrix(0, nrow=n, ncol=n)
+  
+  for (i in 1:n)
+    for (j in 1:n) 
+      if (i != j) {
+         MH_ratio <- min(1,v[j]*R[j,i]/(v[i]*R[i,j]))
+         M[i,j] <- R[i,j]*MH_ratio
+      }
+  
+  diag(M) <- 1 - rowSums(M)
+  return (M)
+}
+
+# compute M for the two proposals, A and B
+R_A <- matrix(rep(c(0.01, 0.49, 0.20, 0.30), 4), byrow=T, nrow=4)
+R_B <- matrix(1/3, nrow=4, ncol=4); diag(R_B) <- 0
+
+R_A
+R_B
+
+# stationary distribution
+v <- c(0.49, 0.20, 0.30, 0.01)
+
+# compute MH matrices
+M_A <- MH_TPM(R_A, v)
+M_B <- MH_TPM(R_B, v)
+
+M_A
+M_B
+```
+
+## (b)
+
+```{r}
+# compute stationary distribution of proposal A
+sA <- eigen(t(M_A))$vectors[,1]; sA <- sA/sum(sA)
+sA
+
+# proposal B
+sB <- eigen(t(M_B))$vectors[,1]; sB <- sB/sum(sB)
+sB
+```
+
+Notice, as it should be if we have computed the Metropolis-Hastings matrices correctly, the stationary distibutions are our target distribution $v$.
+
+## (c)
+
+```{r}
+lam2_A <- eigen(t(M_A))$values[2]
+lam2_A
+TM_A <- abs(1/log(sqrt(Re(lam2_A)^2 + Im(lam2_A)^2)))
+TM_A
+
+lam2_B <- eigen(t(M_B))$values[2]
+lam2_B
+TM_B <- abs(1/log(sqrt(Re(lam2_B)^2 + Im(lam2_B)^2)))
+TM_B
+```
+
+Notice that the mixing time of proposal $A$, about $48$ steps, is much longer than proposal $B$, about $1$ step.
+
+## (d)
+
+```{r, cache=T}
+powM <- function(M, k)
+{
+  out <- diag(nrow(M))
+  for (i in 1:k)
+    out <- out %*% M
+  return (out)
+}
+
+# show times assuming start in state 1
+show_times <- function(M, Tm)
+{
+  Tm <- round(Tm)
+  
+  p1 <- powM(M, Tm)[1,]
+  p2 <- powM(M, 2*Tm)[1,]
+  p10 <- powM(M, 10*Tm)[1,]
+  pInf <- eigen(t(M))$vectors[,1]; pInf <- pInf/sum(pInf)
+  
+  prob_m <- matrix(c(p1, p2, p10, pInf), byrow=T, nrow=4)
+  rownames(prob_m) <- c("Tm", "2*Tm", "10*Tm", "target")
+  
+  return (prob_m)
+}
+
+# Probability distributions for K*Tm 
+# proposal A
+show_times(M_A, TM_A)
+
+# proposal B
+show_times(M_B, TM_B)
+```
+
+Notice that for both proposals, the distribution of the Metropolis-Hastings chain at $2T_m$ is still significantly different than the target distribution, but by $10T_m$ the distributions is essentially identical to the target.  However, in the case of proposal A, $10T_m$ is roughly $500$ time steps while for proposal B, $10T_m$ is roughly $10$ time steps.   The moral is that a bad proposal will lead to long mixing times, meaning that we have to run the MCMC chain a long time to converge to the stationary distribution.  

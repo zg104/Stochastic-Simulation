@@ -1,0 +1,416 @@
+---
+title: "Homework 12"
+author: "Zijing Gao"
+output: pdf_document
+---
+
+```{r, message=F, warning=F, echo=F}
+library(plyr, quietly = T, warn.conflicts = F)
+library(dplyr, quietly = T, warn.conflicts = F)
+library(ggplot2, quietly = T, warn.conflicts = F)
+```
+
+
+# Problem 1
+
+## (a)
+
+The likelihood is given by
+\begin{equation}
+L(\mu) = \prod_{i=1}^N \frac{1}{\sqrt{2 \pi \sigma^2}} \exp[\frac{(\hat{X}_i - \mu)^2}{2\sigma^2}],
+\end{equation}
+and, in turn, the log-likelihood is given by
+\begin{equation}
+\ell(\mu) = -\frac{N}{2} \log(2\pi\sigma^2) - \sum_{i=1}^N \frac{(\hat{X}_i - \mu)^2}{2\sigma^2},
+\end{equation}
+
+Taking the derivative of $\ell(\mu)$ and setting to $0$ gives,
+\begin{equation}
+\sum_{i=1}^N \frac{(\hat{X}_i - \mu)}{\sigma^2} = 0
+\end{equation}
+Solving for $\mu$ gives 
+\begin{equation}
+\mu = \frac{1}{N} \sum_{i=1}^N \hat{X}_i
+\end{equation}
+
+## (b)
+
+First, let's show (1) and (2).  The posterior is defined as $P(\mu | \hat{X}_1, \hat{X}_2, \dots, \hat{X}_N)$.
+\begin{equation}
+p(\mu) = P(\mu | \hat{X}_1, \hat{X}_2, \dots, \hat{X}_N)
+= \frac{P(\mu, \hat{X}_1, \hat{X}_2, \dots, \hat{X}_N)}{P(\hat{X}_1, \hat{X}_2, \dots, \hat{X}_N)}
+= \frac{P(\hat{X}_1, \hat{X}_2, \dots, \hat{X}_N \ | \ \mu)P(\mu)}{P(\hat{X}_1, \hat{X}_2, \dots, \hat{X}_N)}
+= \frac{P(\hat{X}_1, \hat{X}_2, \dots, \hat{X}_N \ | \ \mu)f(\mu)}{P(\hat{X}_1, \hat{X}_2, \dots, \hat{X}_N)}
+\end{equation}
+
+We are done if we can show that $Z = P(\hat{X}_1, \hat{X}_2, \dots, \hat{X}_N)$.
+\begin{align}
+P(\hat{X}_1, \hat{X}_2, \dots, \hat{X}_N)
+& = \int_{-\infty}^\infty P(\hat{X}_1, \hat{X}_2, \dots, \hat{X}_N, \mu=z)  dz \\ \notag &
+= \int_{-\infty}^\infty P(\hat{X}_1, \hat{X}_2, \dots, \hat{X}_N \ | \ \mu=z) P(\mu=z) dz \\ \notag &
+= \int_{-\infty}^\infty P(\hat{X}_1, \hat{X}_2, \dots, \hat{X}_N \ | \ \mu=z) f(z) dz.
+\end{align}
+Notice the term to the right of the last equality above is exactly the expression for $Z$ given in (2) of the homework.
+
+Now let's show that the posterior is normal.   Plugging in the form of the likelihood from part (a),
+we have
+\begin{align}
+p(\mu) = P(\mu | \hat{X}_1, \hat{X}_2, \dots, \hat{X}_N) & = 
+\frac{1}{Z} 
+\prod_{i=1}^N \frac{1}{\sqrt{2 \pi \sigma^2}} \exp[\frac{(\hat{X}_i - \mu)^2}{2\sigma^2}]
+f(\mu)
+\\ \notag & 
+= \frac{1}{Z} 
+\prod_{i=1}^N \frac{1}{\sqrt{2 \pi \sigma^2}} \exp[\frac{(\hat{X}_i - \mu)^2}{2\sigma^2}]
+\frac{1}{\sqrt{2 \pi \beta^2}} \exp[\frac{\mu^2}{2\beta^2}]
+\end{align}
+
+Since the only variable is $\mu$, we can collect all terms not dependent on $\mu$ into a single constant $c$, giving
+\begin{align}
+p(\mu) = c 
+\prod_{i=1}^N \exp[\frac{-2\mu \hat{X}_i + \mu^2}{2\sigma^2}]
+ \exp[\frac{\mu^2}{2\beta^2}],
+\end{align}
+where I have expended out the $(\hat{X}_i - \mu)^2$ terms in the exponential and explicitely kept only the terms involving $\mu$, with the other terms pushed into $c$.
+
+Now let's complete the square on the terms in the exponential, since the terms are in the exponential the product in the likelihood becomes a sum.
+\begin{equation}
+\sum_{i=1}^N \left(\frac{-2\mu \hat{X}_i + \mu^2}{\sigma^2}\right) + \frac{\mu^2}{\beta^2}
+=  \mu^2 (\frac{N}{\sigma^2} + \frac{1}{\beta^2}) - 2 \frac{\mu  \sum_{i=1}^N \hat{X}_i}{\sigma^2}
+= (\frac{N}{\sigma^2} + \frac{1}{\beta^2}) \bigg(
+\mu - \frac{\frac{ \sum_{i=1}^N \hat{X}_i}{\sigma^2}}{\frac{N}{\sigma^2} + \frac{1}{\beta^2}}
+\bigg)^2 + c',
+\end{equation}
+where $c'$ does not depend on $\mu$.  I'll ignore $c'$ because we can just push it into $c$.  With a bit of algebra, we get the cleaner expression
+\begin{align}
+\sum_{i=1}^N \frac{-2\mu \hat{X}_i + \mu^2}{\sigma^2} + \frac{\mu^2}{\beta^2}
+& = \frac{\sigma^2 + N\beta^2}{\sigma^2 \beta^2} \bigg(
+\mu - \bar{x} \frac{N\beta^2}{\sigma^2 + N\beta^2} \bigg)^2
+ + c' \\ \notag
+ & = \frac{\sigma^2 + N\beta^2}{\sigma^2 \beta^2} \bigg(
+\mu - \bar{x} \frac{1}{1 + \frac{\sigma^2}{N\beta^2}} \bigg)^2
+ + c'
+\end{align}
+where $\bar{x}$ is the sample mean.
+
+Plugging all this back into the expression above for the posterior, and pushing $c'$ into $c$ (i.e. $c \to cc'$) gives
+\begin{align}
+p(\mu) & = c \exp[-\frac{\sigma^2 + N\beta^2}{\sigma^2 \beta^2} \frac{\big(
+\mu - \bar{x} \frac{1}{1 + \frac{\sigma^2}{N\beta^2}} \big)^2}{2}]
+\\ \notag &
+= c \exp[-\frac{\big(
+\mu - \bar{x} \frac{1}{1 + \frac{\sigma^2}{N\beta^2}} \big)^2}{2\frac{\sigma^2 \beta^2}{\sigma^2 + N\beta^2}}]
+\end{align}
+
+The posterior is a probability distribution, so it must integrate to $1$.   In the expression above we can recognize the pdf of $\mathcal{N}(\bar{x} \frac{1}{1 + \frac{\sigma^2}{N\beta^2}}, \frac{\sigma^2 \beta^2}{\sigma^2 + N\beta^2})$ up to a constant.  But $c$ must be the correct normalizing constant, so we can conclude that the posterior is distributed as $\mathcal{N}(\bar{x} \frac{1}{1 + \frac{\sigma^2}{N\beta^2}}, \frac{\sigma^2 \beta^2}{\sigma^2 + N\beta^2})$.
+
+```{r, cache=T}
+X <- read.table("HW12_problem1.txt", header=T)$x
+sigma2 <- 1
+beta2 <- 10
+N <- length(X)
+sm <- mean(X)
+cat("sample mean=", sm, "\n")
+
+posterior_mu <- sm/(1 + sigma2/N/beta2)
+posterior_var <- sigma2*beta2/(sigma2+N*beta2)
+
+plot_x <- seq(7,8, .01)
+plot_y <- dnorm(plot_x, mean=posterior_mu, sd=sqrt(posterior_var))
+plot(plot_x, plot_y, xlab="mu", ylab="p(mu)", type="l")
+```
+
+Notice that the posterior is roughly centered at the sample mean because $N$ is relatively large.
+
+## (c)
+
+Using the results from (b) with slight modification (essentially terms involving $beta$ are gone), we have
+\begin{equation}
+p(\mu) = \bigg\{
+\begin{array}{cc}
+c \exp[-\frac{\mu - \bar{x}}{2 \frac{\sigma^2}{N}}] & \text{if } \mu \notin [5,10] \\
+0 & \text{otherwise}
+\end{array}
+\end{equation}
+Notice that $p(\mu)$ is not normal because the support of its pdf is on $[5,10]$.   $c$ needs to normalize the posterior, giving
+\begin{equation}
+\frac{1}{c} = \int_5^{10} \exp[-\frac{\mu - \bar{x}}{2 \frac{\sigma^2}{N}}] d\mu
+\end{equation}
+
+To compute $c$, let's get a feel for the parameter values,
+```{r, cache=T}
+# sample mean
+print(sm)
+# standard deviation
+v <- sigma2/N
+print(sqrt(v))
+```
+
+So the integrand giving $c$ is roughly centered at $7.5$ and extends out, say, $4*0.15 = 0.6$ units to the left and right.   I'll use Trapezoid rule (\verb+https://en.wikipedia.org/wiki/Trapezoidal_rule+) to compute the integral
+```{r}
+X <- read.table("HW12_problem1.txt", header=T)$x
+sigma2 <- 1
+N <- length(X)
+sm <- mean(X)
+
+mu_vals <- seq(7.5 - 0.6, 7.5 + 0.6, by=.01)
+vals <- exp(-(mu_vals - sm)^2/(2 * sigma2/N))
+n_mu_vals <- length(mu_vals)
+dmu <- .01
+
+
+integral_value <- (sum(vals) - 1/2*(vals[1] + vals[n_mu_vals])) * dmu
+cval <- 1/integral_value
+print(cval)
+```
+
+Now, let's plot
+```{r,cache=T}
+plot_x <- seq(7, 8, 0.01)
+plot_y <- cval*exp(-(plot_x - sm)^2/(2 * sigma2/N))
+plot(plot_x, plot_y, xlab="mu", ylab="p(mu)", type="l")
+```
+
+# Problem 2
+
+## (a)
+
+Let's start with the likelihood,
+\begin{equation}
+L(a_0, a_1, a_2, \sigma^2) = \prod_{i=1}^N \frac{1}{\sqrt{2 \pi \sigma^2}}
+\exp[\frac{(y_i - a_0 - a_1 x_1^{(i)} - a_2 x_2^{(i)} )^2}{2\sigma^2}],
+\end{equation}
+which in turn gives the log-likelihood,
+\begin{equation}
+\ell(a_0, a_1, a_2, \sigma^2) = -\frac{N}{2} \log(2\pi\sigma^2) - \sum_{i=1}^N \frac{(y_i - a_0 - a_1 x_1^{(i)} - a_2 x_2^{(i)})^2}{2\sigma^2}.
+\end{equation}
+
+Let's start with $\sigma^2$.  It turns out that if we know $a_0, a_1, a_2$, then we can write down an explicit formula for $\sigma^2$.  First, let's compute the partial of $\ell(a_0, a_1, a_2, \sigma^2)$ with respect to $\sigma^2$.
+\begin{equation}
+\frac{\partial}{\partial \sigma^2} \ell(a_0, a_1, a_2, \sigma^2)
+= -\frac{N}{2} \frac{1}{\sigma^2} + \sum_{i=1}^N \frac{(y_i - a_0 - a_1 x_1^{(i)} - a_2 x_2^{(i)})^2}{2(\sigma^2)^2}.
+\end{equation}
+Then setting the partial to $0$ and solving for $\sigma^2$ gives,
+\begin{equation}
+\sigma^2 = \frac{1}{N} \sum_{i=1}^N (y_i - a_0 - a_1 x_1^{(i)} - a_2 x_2^{(i)})^2
+\end{equation}
+
+Finding the MLE for $a_0, a_1, a_2$ involves derivation of the normal equations.  Here I'll point out the main steps and if you have questions, don't hesitate to see me.  Let $y$ be the vector of the $y_i$.  Define a matrix $B$ where the first column is all $1$'s, the second column is the $x_1^{(i)}$ and the third column is the $x_2^{(i)}$.   Let $a = (a_0, a_1, a_2)$ and think of $a$ as a column vector.  Then a bit of algebra shows that we can rewrite the log-likelihood as follows,
+\begin{equation}
+\ell(a_0, a_1, a_2, \sigma^2) = -\frac{N}{2} \log(2\pi\sigma^2) - \frac{1}{2\sigma^2} \| y - Ba\|^2.
+\end{equation}
+
+Then taking the gradient with respect to $a_0, a_1, a_2$ gives $\nabla_a \| y - Ba\|^2 = - 2 B^T y +  B^T B a$.  Applying this identity to the log-likelihood equation directly above gives,
+\begin{equation}
+\nabla_a \ell(a_0, a_1, a_2, \sigma^2) = - \frac{1}{2\sigma^2} \left(- 2B^T y +  B^T B a\right).
+\end{equation}
+Then, set to $0$ and solve for $a$,
+\begin{equation}
+a = (B^TB)^{-1} B^T y,
+\end{equation}
+which gives the normal equations (\verb+http://mathworld.wolfram.com/NormalEquation.html+) and provides the MLE for $a_0, a_1, a_2$.
+
+```{r}
+d <- read.table("HW12_problem2.txt", header=T)
+y <- d$y
+B <- cbind(rep(1, length(y)), dplyr::select(d, -y) %>% as.matrix)
+
+# here's a bit of B
+head(B)
+
+# MLE estimate
+a <- solve(t(B) %*% B, t(B) %*% y) %>% as.numeric
+sigma2 <- mean((y - B %*% a)^2)
+
+
+MLE <- c(a, sigma2) %>% setNames(c("a0", "a1", "a2", "sigma2"))
+MLE
+```
+
+## (b)
+
+The MLE gives me reasonable estimates for the $4$ parameters.  For each of the three $a_i$ I'll choose a prior $\mathcal{N}(0, 100)$, which gives a very wide prior roughly centered around the MLEs.  For $\sigma^2$, I'll assume a exponential prior with rate $1$, i.e. a density $\exp[-x]$ for $x \ge 0$.  Under these assumptions,
+\begin{equation}
+p(\mu) = \frac{1}{Z} \prod_{i=1}^N \frac{1}{\sqrt{2 \pi \sigma^2}}
+\exp[\frac{(y_i - a_0 - a_1 x_1^{(i)} - a_2 x_2^{(i)} )^2}{2\sigma^2}]\mathcal{N}(a_0 \ | \ 0, 100)
+\mathcal{N}(a_1 \ | \ 0, 100)
+\mathcal{N}(a_2 \ | \ 0, 100)
+exp[-\sigma^2]
+\end{equation}
+
+For the Metropolis-Hastings proposal, I'll add $\mathcal{N}(0, .01)$ to the current paramter value and do this independently for each of the four parameters. This will roughly shift each parameter on the order of $\sqrt{.01} = 0.1$, which seems like a reasonable scale.   For $\sigma^2$, I need to make sure the proposal is positive, so I'll propose $|sigma^2 + \mathcal{N}(0, .01)$.  
+
+```{r,cache=T}
+# compute log posterior probability 
+log_posterior <- function(theta, y, B)
+{
+  a <- theta[1:3]
+  s2 <- theta[4]
+  
+  # get log priors
+  fa <- dnorm(a, mean=0, sd=10, log=T) %>% sum
+  fs2 <- -s2
+  
+  likeli <- dnorm(y - B %*% a, mean=0, sd=sqrt(s2), log=T) %>% sum
+  
+  return (fa + fs2 + likeli)
+}
+
+MH <- function(theta, y, B, iter=1E4)
+{
+  theta_m <- matrix(0, nrow=iter, ncol=4)
+  
+  for (i in 1:iter) {
+    p_theta <- theta + rnorm(4, mean=0, sd=.1)
+    p_theta[4] <- abs(p_theta[4])
+    
+    # proposal is symmetric, so the ratio R_ps/R_sp = 1 
+    MH_ratio <- exp(log_posterior(p_theta,y,B) - log_posterior(theta,y,B))
+    if (runif(1) < MH_ratio)
+      theta <- p_theta
+    
+    theta_m[i,] <- theta
+    
+  }
+  
+  colnames(theta_m) <- c("a0", "a1", "a2", "sigma2")
+  return (theta_m)
+}
+
+# test
+theta <- c(0,0,0,1)
+MH(theta, y, B, iter=10)
+```
+
+Looks reasonable, let's run for a while...
+```{r,cache=T}
+m <- MH(theta, y, B, iter=1E5)
+```
+
+Just to check for convergence, let's plot the $a_0$ values
+```{r,cache=T}
+plot(1:nrow(m), m[,"a0"], xlab="MH iteration", ylab="a0", type="l")
+```
+
+Looks good and convergence looks fast!  So I'll use the last $90\%$ of the samples to make the histograms.  The title of each histogram will give the MLE for comparison.
+```{r,cache=T}
+m_burnin <- m[1E4:1E5,]
+breaks <- seq(-1,5,.05)
+
+hist(m_burnin[,"a0"], breaks=breaks, freq=F, xlab="a0", main=paste("MLE: a0=", MLE["a0"], sep=""))
+hist(m_burnin[,"a1"], breaks=breaks, freq=F, xlab="a1", main=paste("MLE: a1=", MLE["a1"], sep=""))
+hist(m_burnin[,"a2"], breaks=breaks, freq=F, xlab="a2", main=paste("MLE: a2=", MLE["a2"], sep=""))
+hist(m_burnin[,"sigma2"], breaks=breaks, freq=F,
+     xlab="sigma2", main=paste("MLE: sigma2=", MLE["sigma2"], sep=""))
+```
+
+
+## (c)
+
+The MLE are within the main portion of the posteriors.  Notice that the posterior gives us a measure of uncertainty which the MLE, at least without further analysis, does not.
+
+
+# Problem 3
+
+I'll solve (b) first, and then (a) and (c) together.
+
+## (b)
+
+\begin{align}
+P(B(t) = x \ | \ B(t_1) = x_1, B(t_2) = x_2)
+& =  \frac{P(B(t) = x,  B(t_1) = x_1, B(t_2) = x_2)}{P(B(t_1) = x_1, B(t_2) = x_2)}
+\\ \notag &
+=  \frac{P(B(t) = x,  B(t) - B(t_1) = x - x_1, B(t_2) - B(t) = x_2 - x)}{P(B(t_1) = x_1, B(t_2) = x_2)}
+\\ \notag &
+= \frac{P(B(t) = x)P(B(t) - B(t_1) = x - x_1)P(B(t_2) - B(t) = x_2 - x)}{P(B(t_1) = x_1, B(t_2) = x_2)},
+\end{align}
+where in the last step I've used the independence of Brownian motion over disjoint intervals. 
+
+Now I'll plug in the densities.  The conditional probability is a function of $x$, so as I did in problem 1, any factor that doesn't involve $x$ will be pushed into a constant $c$.
+\begin{align}
+P(B(t) = x \ | \ B(t_1) = x_1, B(t_2) = x_2) 
+& = c P(B(t) - B(t_1) = x - x_1)P(B(t_2) - B(t) = x_2 - x)
+\\ \notag &
+= c \exp[-\frac{(x-x_1)^2}{2(t-t_1)}] \exp[-\frac{(x_2-x)^2}{2(t_2-t)}]
+\end{align}
+
+Now let's complete the squares of the exponential powers, while this time ignoring summands not depending on $x$.
+\begin{align}
+\frac{(x-x_1)^2}{(t-t_1)} + \frac{(x_2-x)^2}{(t_2-t)}
+& = \frac{1}{(t-t_1)(t_2-t)} \left((x^2 - 2xx_1)(t_2 - t) + (x^2 - 2xx_2)(t - t_1)\right)
+\\ \notag &
+= \frac{1}{(t-t_1)(t_2-t)} \left(x^2 (t_2 - t_1) - 2x(x_1(t_2-t) + x_2(t-t_1))\right)
+\\ \notag &
+= \frac{t_2 - t_1}{(t-t_1)(t_2-t)} \left(x - \frac{x_1(t_2-t) + x_2(t-t_1)}{t_2 - t_1}\right)^2 + c'
+\end{align}
+
+Plugging back into the conditional probability,
+\begin{align}
+P(B(t) = x \ | \ B(t_1) = x_1, B(t_2) = x_2) 
+& 
+= c \exp[\frac{\left(x - \frac{x_1(t_2-t) + x_2(t-t_1)}{t_2 - t_1}\right)^2}
+{2\frac{(t-t_1)(t_2-t)}{t_2-t_1}}].
+\end{align}
+Finally, we recognize the right hand side of the equality as $\mathcal{N}(\frac{x_1(t_2-t) + x_2(t-t_1)}{t_2 - t_1}, \frac{(t-t_1)(t_2-t)}{t_2-t_1})$.  The mean of the normal isn't in the exact form in the homework, but a bit of algebra shows,
+\begin{equation}
+\frac{x_1(t_2-t) + x_2(t-t_1)}{t_2 - t_1}
+= \frac{x_1(t_2-t_1 + t_1 - t) + x_2(t-t_1)}{t_2 - t_1}
+= x_1 + \frac{x_1(t_1 - t) + x_2(t-t_1)}{t_2 - t_1}
+= x_1 + (x_2 - x_1) \frac{t - t_1}{t_2 - t_1}.
+\end{equation}
+
+## (a) 
+
+```{r,cache=T}
+set.seed(123)
+dt <- 0.5
+times <- seq(from= 0, to = 10, by = dt)
+brown <- numeric(length(times))
+brown[1] <- 0
+for (i in 2:length(brown)){
+  brown[i] <- brown[i-1] + rnorm(1, mean=0, sd=sqrt(dt))
+}
+
+plot(times, brown ,type="b", xlab="t", ylab="B(t)", ylim=c(-1,4))
+```
+
+## (c)
+
+```{r,cache=T}
+
+time_grid <- seq(0, 10, .01)
+ntg <- length(time_grid)
+upper_tube <- rep(0, ntg)
+lower_tube <- rep(0, ntg)
+
+for (i in 1:ntg) {
+  t <- time_grid[i]
+  
+  # the last time t==10 gives problems 
+  # below, so handle as a special case
+  if (t==10) {
+    b10 <- brown[length(brown)]
+    upper_tube[i] <- b10
+    lower_tube[i] <- b10
+    next
+  }
+  
+  # what are t1, t2, x1, x2?
+  t1_ind <- which(times <= t) %>% max
+  t2_ind <- which(times > t) %>% min
+  
+  t1 <- times[t1_ind];  t2 <- times[t2_ind] 
+  x1 <- brown[t1_ind];  x2 <- brown[t2_ind] 
+  
+  mean <- x1 + (x2-x1)*(t - t1)/(t2 - t1)
+  var <- (t2-t)*(t-t1)/(t2-t1)
+  upper_tube[i] <- mean + 1.96*sqrt(var)
+  lower_tube[i] <- mean - 1.96*sqrt(var)
+}
+
+plot(times, brown ,type="b", xlab="t", ylab="B(t)", ylim=c(-1,4))
+lines(time_grid, upper_tube, col = 'blue')
+lines(time_grid, lower_tube, col = 'blue')
+```
+
+We cannot sample Brownian motion.  What we sample in (a) is a set of Brownian motion paths that go through the points plotted in the graph.  The interpolating lines are simply there for visualization.  But if we could sample a particular Brownian motion path, then for any time $t$, the value of the Brownian motion would be within the upper and lower limits of the tube with probability $0.95$.

@@ -1,0 +1,257 @@
+---
+title: "Homework 11"
+author: "Zijing Gao"
+output: pdf_document
+---
+
+```{r, message=F, warning=F, echo=F}
+library(plyr, quietly = T, warn.conflicts = F)
+library(dplyr, quietly = T, warn.conflicts = F)
+library(ggplot2, quietly = T, warn.conflicts = F)
+```
+
+
+# Problem 1
+
+## (a)
+
+$X_1$ takes on values $\{-1,1\}$ with equal probability.  $X_2$ is identically distributed to $X_1$, but is independent.  $X_3$ and $X_4$ are created in a two step process. First, $X_3$ and $X_4$ are set to $X_1$ and $-X_1$, respectively.  Next, with independent probability $0.1$, $X_3$ is replaced by $-X_3$ and similarly for $X_4.$
+
+## (b)
+
+\begin{equation}
+\phi(X) = (X_1X_2, X_1X_3, X_1X_4, X_2X_3, X_2X_4, X_3X_4)
+\end{equation}
+with
+\begin{equation}
+\theta = (w_{12}, w_{13}, w_{14}, w_{23}, w_{24}, w_{34})
+\end{equation}
+
+## (c)
+
+```{r, cache=T}
+# Note: This leaves out \alpha, so we compute
+# values proportional to the stationary distribution
+phi <- function(X)
+{
+  c(X[1]*X[2], X[1]*X[3], X[1]*X[4], X[2]*X[3], X[2]*X[4], X[3]*X[4])
+}
+
+log_stationary_dist <- function(X, theta)
+{
+  return (sum(phi(X)*theta))
+}
+
+MH <- function(start_X, theta, time_steps)
+{
+  X <- start_X
+  n <- length(X)
+  path_m <- matrix(0, nrow=time_steps, ncol=n)
+
+  for (i in 1:time_steps) {
+    path_m[i,] <- X
+
+    # construct proposal
+    flip <- sample.int(n, 1)
+    p_X <- X 
+    p_X[flip] <- -p_X[flip]
+
+    # accept-reject (proposal is symmetric so is left out of MH ratio)
+    MH_ratio <- exp(log_stationary_dist(p_X, theta) - log_stationary_dist(X, theta))
+    if (runif(1) < MH_ratio)
+      X <- p_X
+  }
+
+  colnames(path_m) <- paste("X", 1:n, sep="")
+
+  return(path_m)
+}
+
+# test!
+theta <- rep(0,6)
+start_X <- c(1,1,1,1)
+
+# show path of MH chain for 10 steps
+MH(start_X, theta, time_steps=10)
+```
+
+MH algorithm looks good.  Now I'll use it to compute $E[\phi(X) \  \ \ \theta]$
+
+```{r,cache=T}
+Ephi <- function(theta, start_X=c(1,1,1,1))
+{
+  mh <- MH(start_X, theta, time_steps=20000)
+  mh <- mh[1000:20000,]
+  
+  phis <- apply(mh, 1, phi) %>% t
+  return (colMeans(phis))
+}
+
+# test
+Ephi(theta)
+Ephi(theta)
+```
+
+## (d)
+```{r,cache=T}
+calculate_empirical_mean<- function(X_matrix)
+{
+  phis <- apply(X_matrix, 1, phi) %>% t 
+  return (colSums(phis))
+}
+
+gradL <- function(theta, emperical_mean, N)
+{
+  return (emperical_mean - N*Ephi(theta))
+}
+
+steepest_ascent <- function(X_matrix, start_theta, iter=10, 
+                            s=.1, debug=F)
+{
+  theta <- start_theta
+  names(theta) <- c("w12", "w13", "w14", "w23", "w24", "w34")
+  em <- calculate_empirical_mean(X_matrix)
+  N <- nrow(X_matrix)
+  
+  for (i in 1:iter) {
+    g <- gradL(theta, em, N)
+    g <- g/sqrt(sum(g^2))
+    
+    theta <- theta + s*g
+    if (debug) {
+      cat("iteration", i, "\n")
+      cat("theta:", theta, "\n")
+    }
+  }
+  
+  #names(theta) <- c("w12", "w13", "w14", "w23", "w24", "w34")
+  return (theta)
+}
+
+X_matrix <- read.csv("HW11_data.csv", header=T) %>% as.matrix
+# check the first few iterations
+theta_out <- steepest_ascent(X_matrix, start_theta=theta, s=.1, iter=5, debug=T)
+```
+
+Looks reasonable, I'll run for a while now.
+
+```{r, cache=T}
+theta <- runif(6, min=-1, max=1)
+theta_out <- steepest_ascent(X_matrix, start_theta=theta, s=.1, iter=1000, debug=F)
+print(theta_out)
+```
+
+Every $w_{ij}$ involving $X_2$ is close to $0$, reflecting the independence of $X_2$ from the other $X_i$.  $w_{13}$ and $w_{14}$ are roughly $1$ and $-1$, correctly reflecting the positive and negative correlations.  $w_{34}$ is interesting because $X_3$ and $X_4$ are negatively correlated (at roughly $-0.6$ if you check) but we find $w_{34}$ to be roughly $0$.  But notice that if we know $X_1$, then $X_3$ and $X_4$ are conditionally independent.   This reflects the role of $w_{ij}$ as inferring more than simply correlations, but graph stucture.
+
+# Problem 2
+
+## (a)
+
+```{r,cache=T}
+Pj <- function(Y, theta, j)
+{
+    Y1 <- Y; Y1[j] <- 1
+    Yn1 <- Y; Yn1[j] <- -1
+
+    p1 <- exp(sum(theta*phi(Y1)))
+    p2 <- exp(sum(theta*phi(Yn1)))
+
+    p <- c(p1, p2)/(p1+p2)
+    return (p)
+}
+
+Y <- c(1,-1,1,-1)
+# test
+print(Pj(Y, theta, 1))
+print(Pj(Y, theta, 4))
+```
+
+## (b)
+
+```{r, cache=T}
+Ephi_j <- function(X, theta, j)
+{
+   p <- Pj(X, theta, j)
+   X1 <- X; X[j] <- 1
+   Xn1 <- X; Xn1[j] <- -1
+
+   E <- p[1]*phi(X1) + p[2]*phi(Xn1)
+   return (E)
+}
+
+# test
+X <- c(1, 1, 1, -1)
+Ephi_j(X, theta, 2)
+```
+
+## (c)
+
+I'll write a function to compute $p(\theta)$ and one to compute $\nabla p(\theta)$
+
+```{r}
+p <- function(X_matrix, theta)
+{
+   N <- nrow(X_matrix)
+   n <- ncol(X_matrix)
+   total <- 0
+
+   for (i in 1:N)
+     for (j in 1:n) {
+       if (X_matrix[i,j]==1)
+         logP <- Pj(Y=X_matrix[i,], theta, j)[1] %>% log
+       else
+         logP <- Pj(Y=X_matrix[i,], theta, j)[2] %>% log
+
+       total <- total + logP
+     }
+
+   return (1/n*total)
+}
+
+gradp <- function(X_matrix, theta, empirical_sum)
+{
+  N <- nrow(X_matrix)
+  n <- ncol(X_matrix)
+  e_sum <- 0
+  for (i in 1:N)
+    for (j in 1:n) {
+      e_sum <- e_sum + Ephi_j(X_matrix[i,], theta, j)
+    }
+
+  return (empirical_sum - 1/n*e_sum)
+}
+
+p(X_matrix, runif(6))
+em <- calculate_empirical_mean(X_matrix)
+gradp(X_matrix, theta, em)
+```
+
+## (d)
+
+```{r, cache=T}
+steepest_ascent_pseudo <- function(X_matrix, start_theta, iter=10,
+                            s=.1, debug=F)
+{
+  theta <- start_theta
+  names(theta) <- c("w12", "w13", "w14", "w23", "w24", "w34")
+  em <- calculate_empirical_mean(X_matrix)
+  N <- nrow(X_matrix)
+
+  for (i in 1:iter) {
+    g <- gradp(X_matrix, theta, em)
+    g <- g/sqrt(sum(g^2))
+
+    theta <- theta + s*g
+    if (debug) {
+      cat("iteration", i, p(X_matrix, theta), "\n")
+    }
+  }
+
+  return (theta)
+}
+
+theta_out <- steepest_ascent_pseudo(X_matrix, start_theta=theta, s=.1, iter=30, debug=T)
+print(theta_out)
+```
+
+For the psuedo likelihood we can track how $p(\theta)$ changes and see that after roughly $30$ iterations, we get convergence to roughly the same values as when using the likelihood itself.  

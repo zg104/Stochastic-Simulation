@@ -1,0 +1,277 @@
+---
+title: "Homework 9"
+author: "Zijing Gao"
+output: pdf_document
+---
+
+```{r}
+library(dplyr, quietly = T)
+library(plyr, quietly = T)
+library(ggplot2, quietly = T)
+```
+
+# Problem 1
+
+
+## (a)
+
+```{r}
+# this function samples arbitrary discrete state HMM
+# M is the transition matrix of the hidden chain (X(t))
+# g is a matrix, the ith column of g gives g_i(Y) - P(Y | X=i)
+SampleCasino <- function(M, g, start_X, time_steps)
+{
+  n <- nrow(M)
+  m <- nrow(g)
+  
+  # first simulate the hidden chain
+  X <- rep(0, time_steps)
+  X[1] <- start_X
+  for (i in 2:time_steps) 
+    X[i] <- sample.int(n, 1, prob=M[X[i-1],])
+  
+  # now sample the observed states
+  Y <- sapply(1:time_steps, function(t) {
+    X_state <- X[t]
+    sample.int(m, 1, prob=g[,X_state])
+  })
+    
+  return (list(X=X, Y=Y))
+}
+```
+
+## (b)
+
+```{r, cache=T}
+M <- matrix(c(.95, .05, .05, .95), byrow=T, nrow=2)
+M
+g1 <- rep(1/6,6)
+g2 <- c(rep((1 - 1/50)/5, 5), 1/50)
+g <- matrix(c(g1, g2), ncol=2)
+g
+# check!
+rowSums(M)
+colSums(g)
+
+set.seed(123456)
+XY_sample <- SampleCasino(M, g, start_X=1, time_steps=200)
+plot(XY_sample$X, xlab="time step", ylab="X(t), 1=FAIR, 2=CHEAT")
+plot(XY_sample$Y, xlab="time step", ylab="Y(t)")
+```
+  
+Above are the samples of $X(t), Y(t)$ plotted.  Then the probability is given by,
+\begin{align}
+P(X(0) = i_0, X(1) = i_1, \dots,& X(T) = i_T \ | \ Y(0) = j_0,
+	 Y(1) = j_1, \dots, Y(T) = j_T)
+ = \alpha \prod_{k=1}^T \bigg( M_{i_{k-1},i_k} g_{i_k}(j_k) \bigg) g_{i_0}(j_0).
+\end{align}
+
+Above
+\begin{equation}
+\alpha = \frac{1}{P(Y(0) = j_0,
+	 Y(1) = j_1, \dots, Y(T) = j_T)}
+\end{equation}
+The denominator can be computed by summing over all possible values of $X(t)$.  (For $T=200$ this corresponds to $2^{200}$ summands and cannot be computed.)
+\begin{align}
+P(Y(0) = j_0, Y(1) = j_1, \dots, Y(T) = j_T)
+& = \sum_{i_1=1}^2 \sum_{i_2=1}^2 \cdots \sum_{i_T=1}^2
+P(X(0) = i_0, X(1) = i_1, \dots,& X(T) = i_T \ | \ Y(0) = j_0,
+\\ \notag & \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ 
+	 Y(1) = j_1, \dots, Y(T) = j_T)
+\\ \notag
+& =  \sum_{i_1=1}^2 \sum_{i_2=1}^2 \cdots \sum_{i_T=1}^2
+\prod_{k=1}^T \bigg( M_{i_{k-1},i_k} g_{i_k}(j_k) \bigg) g_{i_0}(j_0)
+\end{align}
+
+## (c)
+
+The state space is all binary (i.e $0$ or $1$) sequences of length $T+1$.
+
+## (d)
+
+```{r, cache=T}
+# returns MH_ratio.  The variable i is
+# the index of the flipped state, all other
+# values are equal in X, pX.  
+MH_ratio <- function(X, pX, i, theta)
+{
+  M <- theta$M
+  Y <- theta$Y
+  g <- theta$g
+  n <- length(X)
+  
+  
+  if (i != 1 & i != n) {
+    MH_numerator <- M[pX[i-1],pX[i]]*M[pX[i],pX[i+1]]*g[Y[i],pX[i]]
+    MH_denominator <- M[X[i-1],X[i]]*M[X[i],X[i+1]]*g[Y[i],X[i]]
+  } else if (i==1) {
+    MH_numerator <- M[pX[i],pX[i+1]]*g[Y[i],pX[i]]
+    MH_denominator <- M[X[i],X[i+1]]*g[Y[i],X[i]]
+  } else {
+    MH_numerator <- M[pX[i-1],pX[i]]*g[Y[i],pX[i]]
+    MH_denominator <- M[X[i-1],X[i]]*g[Y[i],X[i]]
+  }
+  
+  return (MH_numerator/MH_denominator)
+}
+
+
+MH <- function(start_X, theta, MH_time_steps, thinning_increment=1000)
+{
+  X <- start_X
+  n <- length(X)
+  
+  path_m <- matrix(0, nrow=round(MH_time_steps/thinning_increment), ncol=n)
+  path_counter <- 1
+  
+  for (i in 1:MH_time_steps) {
+    # store every 1000th
+    if (i %% thinning_increment == 0) {
+      path_m[path_counter,] <- X
+      path_counter <- path_counter + 1
+    }
+    
+    # create proposal
+    p_X <- X
+    flip_ind <- sample.int(n,1)
+    p_X[flip_ind] <- 3 - p_X[flip_ind]
+    
+    # accept-reject (proposal is symmetric so is left out of MH ratio)
+    # stationary_dist return log
+    if (runif(1) < MH_ratio(X, p_X, flip_ind, theta))
+      X <- p_X
+  }
+  
+  return(path_m)
+}
+
+
+# test the Metropolis-Hastings chain
+start_X <- rep(1, 200)
+
+# I defined these above, here I'm just rewriting
+M <- matrix(c(.95, .05, .05, .95), byrow=T, nrow=2)
+M
+g1 <- rep(1/6,6)
+g2 <- c(rep((1 - 1/50)/5, 5), 1/50)
+g <- matrix(c(g1, g2), ncol=2)
+g
+
+theta <- list(M=M, g=g, Y=XY_sample$Y)
+# test the chain, the thinning increment determines how often
+# to store the state of the MH chain. I don't store every time
+# step because the chain changes very slowly and it would take too
+# much memory.
+MH_out <- MH(start_X, theta, 5000, thinning_increment=1000)
+dim(MH_out)
+
+# look at start and end states
+plot(MH_out[1,])
+plot(MH_out[5,])
+```
+
+Looks ok.  Let's just run for as long as we can and see what happens.  Let it rip! 
+```{r, cache=T}
+MH_out <- MH(start_X, theta, 1E9, thinning_increment=10000)
+```
+
+Let's look at a sample in the chain.
+```{r, cache=T}
+plot(MH_out[90000,])
+```
+
+Hard to say, but looks reasonable.   Let's compute the probability of cheating at each time point and plot.  Let's drop the first 30,000 samples (since we thin by $10,000$ that means the first $300$ million time steps) as burn-in.
+```{r, cache=T}
+cheating_prob <- colMeans(MH_out[30000:100000,]==2)
+plot(cheating_prob, xlab="time step", ylab="P(X(t)=C|data)", type="l",
+     ylim=c(0,1.2))
+points(cheating_prob, col="black", cex=.5)
+points(XY_sample$X-1, col="red")
+# put down die rolls of 6
+die_6 <- which(XY_sample$Y==6) 
+points(die_6, rep(1.1, length(die_6)), col="green")
+```
+
+Shown are the true $X(t)$ values (red) and the time steps at which a $6$ was rolled (green) as well as the computed probabilities (black).  The general trend looks good, with the rise in probability matching locations where $6$'s are rare.
+
+# Problem 2
+
+## (a)
+
+Here's equation (2) from hw $8$ with $X_1,X_2,X_3$ replacing $X,Y,Z$,
+\begin{equation}
+P(X_1,X_2,X_3) =\alpha \exp[\eta_1 X_1 + \eta_2 X_2 + \eta_3 X_3 - w_{12} X_1X_2 - w_{13} X_1X_3 - w_{23} X_2X_3]
+\end{equation}
+
+Define,
+\begin{equation}
+\theta = (\eta_1, \eta_2, \eta_3, w_{12}, w_{13}, w_{23}
+\end{equation}
+and
+\begin{equation}
+\phi(X) = (X_1, X_2, X_3, -X_1X_2, -X_1X_3, -X_2X_3)
+\end{equation}
+Then,
+\begin{equation}
+P(X_1,X_2,X_3) = \alpha \exp[\theta \cdot \phi(X)]
+\end{equation}
+
+The log-likelihood is given by,
+\begin{equation}
+\ell(\theta) = \sum_{i=1}^N \log P(X^{(i)} \ | \ \theta)
+= \sum_{i=1}^N \theta \cdot \phi(X^{(i)}) - N \log (\alpha)
+\end{equation}
+and then taking the gradient with respect to $\theta$ gives,
+\begin{equation}
+\nabla \ell(\theta) = \sum_{i=1}^N \phi(X^{(i)}) + N \nabla \log (\alpha)
+= \sum_{i=1}^N \phi(X^{(i)}) + N \frac{\nabla \alpha}{\alpha}
+\end{equation}
+I have written $\alpha$ as a constant, but it really depends on $\theta$ and should be written $\alpha(\theta)$.
+
+Since $\alpha$ serves to normalize the probability, 
+\begin{equation}
+\alpha = \frac{1}{\int_{-\infty}^\infty \int_{-\infty}^\infty \int_{-\infty}^\infty
+\exp[\theta \cdot \phi(X)] dX_1 dX_2 dX_2}
+\end{equation}
+Taking an $\theta_k$ partial,
+\begin{align}
+\frac{\partial \alpha}{\partial \theta_k}
+&= -\left( \frac{1}{\int_{-\infty}^\infty \int_{-\infty}^\infty \int_{-\infty}^\infty
+\exp[\theta \cdot \phi(X)] dX_1 dX_2 dX_2} \right) ^2
+\int_{-\infty}^\infty \int_{-\infty}^\infty \int_{-\infty}^\infty
+\left(
+\frac{\partial }{\partial \theta_k}
+\exp[\theta \cdot \phi(X)]
+\right)
+dX_1 dX_2 dX_2
+\\ \notag
+& = -\alpha^2
+\int_{-\infty}^\infty \int_{-\infty}^\infty \int_{-\infty}^\infty (\phi(X))_k
+\exp[\theta \cdot \phi(X)] dX_1 dX_2 dX_2
+\end{align}
+
+If we now consider $\frac{1}{\alpha} \frac{\partial \alpha}{\partial \theta_k}$, we have
+\begin{align}
+\frac{1}{\alpha} \frac{\partial \alpha}{\partial \theta_k} & =
+-\alpha
+\int_{-\infty}^\infty \int_{-\infty}^\infty \int_{-\infty}^\infty (\phi(X))_k
+\exp[\theta \cdot \phi(X)] dX_1 dX_2 dX_2
+\\ \notag
+& = - \int_{-\infty}^\infty \int_{-\infty}^\infty \int_{-\infty}^\infty (\phi(X))_k
+\alpha \exp[\theta \cdot \phi(X)] dX_1 dX_2 dX_2
+\\ \notag
+& = -\int_{-\infty}^\infty \int_{-\infty}^\infty \int_{-\infty}^\infty (\phi(X))_k
+P(X \ | \ \theta) dX_1 dX_2 dX_2
+\\ \notag
+& = -E[\phi(X)_k].
+\end{align}
+
+So we find, by considering all partials,
+\begin{equation}
+\frac{\nabla \alpha}{\alpha} = -E[\phi(X)]
+\end{equation}
+which finally gives,
+\begin{equation}
+\nabla \ell(\theta)
+= \sum_{i=1}^N \phi(X^{(i)}) - N E[\phi(X) \ | \ \theta].
+\end{equation}

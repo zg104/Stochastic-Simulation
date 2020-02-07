@@ -1,0 +1,333 @@
+---
+title: "Homework 13"
+author: "Zijing Gao"
+output: pdf_document
+---
+
+```{r, message=F, warning=F, echo=F}
+library(plyr, quietly = T, warn.conflicts = F)
+library(dplyr, quietly = T, warn.conflicts = F)
+library(ggplot2, quietly = T, warn.conflicts = F)
+```
+
+
+# Problem 1
+
+## (a)
+
+$ZZ^T$ produces an $n \times n$ matrix.  $ZZ^T_{ij}$, the ij entry of the matrix $ZZ^T$, is given by $Z_iZ_j$. $E[ZZ^T]$ will be an $n \times n$ matrix with $E[ZZ^T]_{ij} = E[Z_iZ_j]$, which is the covariance of $Z_i$ and $Z_j$ since $Z$ has mean $0$.  Therefore, $E[ZZ^T]$ is the covariance matrix.
+
+## (b)
+
+Let's compute the covariance matrix of $Y$ using (a).
+\begin{equation}
+E[YY^T] = E[A^{-1}XX^T(A^{-1})^T].
+\end{equation}
+
+We know $E[XX^T] = \Sigma = AA^T$.  A linear algebra fact that you can prove is that $(A^{-1})^T = (A^T)^{-1}$.  Pluggin these two relations into the equation above gives,
+\begin{equation}
+E[YY^T] = A^{-1}E[XX^T](A^T)^{-1} = A^{-1}AA^T(A^T)^{-1} = I
+\end{equation}
+
+We know that $Y$ is normal because it's the linear combination of coordinates of $X$ (we proved this in a previous hw).  We know that $Y$ has mean $0$ because $E[Y] = A^{-1} E[X] = 0$.  Finally, we have $Y \sim \mathcal{N}(0, I)$.  
+
+## (c)
+
+From part (b), $X = AY$ and we can sample $Y$ by sampling $n$ iid standard normals.  The R function \textbf{chol} returns $A^T$, so I transpose in the function below.
+```{r}
+CholeskyMV <- function(sigma)
+{
+  # R is returning A^T, so I'll transpose to get A
+  A <- chol(sigma) %>% t
+  Y <- rnorm(nrow(sigma))
+  return (A %*% Y)
+}
+
+# here's a symmetric, positive definite matrix 
+z <- matrix(c(10, 1, 1, 10), nrow=2, byrow=T)
+# all the eigenvalues are positive making it positive definite
+eigen(z)$values
+
+# test 
+CholeskyMV(z)
+```
+
+## (d)
+
+```{r,cache=T}
+ConstructSigma <- function(t, sigma2, lambda)
+{
+  n <- length(t)
+  Sigma <- matrix(0, nrow=n, ncol=n)
+  
+  for (i in 1:n)
+    for (j in 1:n)
+      Sigma[i,j] <- sigma2*exp(-lambda*abs(t[i]-t[j]))
+  
+  return (Sigma)
+}
+
+# test
+t <- 1:5
+s <- ConstructSigma(t, 1, 1)
+print(s)
+# for fun let's check if it's positive definite
+eigen(s)$values
+# all eigenvalues are positive so positive definite!
+```
+
+## (e)
+
+```{r, cache=T}
+t <- 1:5000
+s <- ConstructSigma(t, 1, 1)
+
+q1 <- proc.time()
+e <- eigen(s)
+print(proc.time()- q1)
+
+q1 <- proc.time()
+e <- chol(s)
+print(proc.time()- q1)
+```
+
+# Problem 2
+
+## (a)
+
+We have assumed that $E[X(\tau)] = 0$ for any time $\tau$ (including $\tau = 0$).   Then the variance $V[X(\tau)] = E[X^2(\tau)] = r(0) = \sigma^2$.  Since $X(\tau)$ is normal, by the definition of a Guassian process, $X(\tau) \sim \mathcal{N}(0, \sigma^2)$.
+
+## (b)
+
+We have to 
+
+```{r,cache=T}
+t <- seq(0, 10, .01)
+
+sigma2 <- 1
+lambda <- 10
+Sigma <- ConstructSigma(t, sigma2, lambda)
+X <- CholeskyMV(Sigma)
+plot(t, X, type="l", main="sigma2=1, lambda=10")
+
+sigma2 <- 1
+lambda <- 1
+Sigma <- ConstructSigma(t, sigma2, lambda)
+X <- CholeskyMV(Sigma)
+plot(t, X, type="l",  main="sigma2=1, lambda=1")
+
+sigma2 <- 10
+lambda <- 1
+Sigma <- ConstructSigma(t, sigma2, lambda)
+X <- CholeskyMV(Sigma)
+plot(t, X, type="l",  main="sigma2=10, lambda=1")
+```
+
+## (c)
+
+Notice that in the first two plots, the y-axis goes from $-2$ to $2$.   This reflects the variance of $X(t)$, which is determined by $\sigma^2$.  We see that the process is mainly staying within two standard deviations of $0$.   But when $\lambda=10$ the path of the GP is much more erratic, reflecting a loss of correlation on the time scale of $1/\lambda$, in this case $1/10$.  The final plot looks roughly like the second plot.  In both cases $\lambda=1$, but notice that in the third plot the y-axis goes from $-6$ to $6$, reflecting the $\sigma^2=10$ value.
+
+# Problem 3
+
+## (a)
+
+Rearranging the model gives,
+\begin{equation}
+X(t) = \text{temperature(t, y)} - a_0 + a_1t
+\end{equation}
+Set 
+\begin{equation}
+e_t^{(y)} = \text{temperature(t, y)} - a_0 + a_1t;
+\end{equation}
+and $e^{(y)}$ the vector collecting $e_t^{(y)}$ over all days $t$. Then we have the likelihood
+\begin{align}
+L(a_0, a_1, \sigma^2, \lambda) & = 
+\prod_{y=2013}^{2016} 
+\frac{1}{\sqrt{(2\pi)^{122} \text{det} \Sigma}}
+\exp[\frac{-(e^{(y)})^T \Sigma^{-1} e^{(y)}}{2}]
+\end{align}
+
+
+## (b)
+
+$\Sigma$ shows up twice in the likelihood, once  as $\Sigma^{-1}$ and once as $\text{det}(\Sigma)$.  First, let's show that if $\Sigma = \sigma^2 \Gamma$ then $\Sigma^{-1} = \frac{1}{\sigma^2} \Gamma^{-1}$.
+\begin{equation}
+\Sigma (\frac{1}{\sigma^2} \Gamma^{-1})
+= (\sigma^2 \Gamma) (\frac{1}{\sigma^2} \Gamma^{-1}) = I
+\end{equation}
+
+Next let's consider $\text{det}(\Sigma)$.  Simply substituting givess, $\text{det}(\Sigma) = \text{det}(\sigma^2 \Gamma)$.  An easy way to see the consequence of the factor $\sigma^2$ on the determinant is to use the determinant relation $\text{det}(AB) = \text{det}(A) \text{det}(B)$.  To use this relation, notice $\sigma^2 \Gamma$ = $(\sigma^2 I) \Gamma$ where $I$ is the identity matrix.  Then 
+\begin{equation}
+\text{det}(\sigma^2I \Gamma) = \text{det}(\sigma^2I) \text{det} (\Gamma).
+\end{equation}
+$\sigma^2I$ is a $122 \times 122$ diagonal matrix with each diagonal entry having value $\sigma^2$.   The determininant is the product of the diagonal entries for a diagonal matrix, so we have
+\begin{equation}
+\text{det} (\Sigma) = (\sigma^2)^{122} \text{det} (\Gamma).
+\end{equation}
+
+Plugging these relations into the likelihood gives,
+\begin{align}
+L(a_0, a_1, \sigma^2, \lambda) & = 
+\prod_{y=2013}^{2016} 
+\frac{1}{\sqrt{(2\pi \sigma^2)^{122} \text{det} \Gamma}}
+\exp[\frac{-(e^{(y)})^T \Gamma^{-1} e^{(y)}}{2 \sigma^2}]
+\end{align}
+
+## (c)
+
+Taking the log of the likelihood directly above gives,
+
+\begin{align}
+\ell(a_0, a_1, \sigma^2, \lambda) & = -\frac{122(4)}{2} \log(2 \pi \sigma^2) - 2 \text{det} (\Gamma) -
+\sum_{y=2013}^{2016}
+\frac{(e^{(y)})^T \Gamma^{-1} e^{(y)}}{2\sigma^2}.
+\end{align}
+
+Using the same ideas discussed in homework $12$ for the linear regression, we can rewrite,
+\begin{equation}
+e^{(y)} = T^{(y)} - M a
+\end{equation}
+where $a = (a_1, a_2)$, and $a$ is thought of as a column vector.  $M$ is the $122 \times 2$ model matrix, with all $1$'s in the first columns and the sample times in the second.  Taking the gradient of the log-likelihood with respect to $a$ (i.e. keeping $\sigma^2, \lambda$ fixed), gives
+\begin{align}
+\nabla_a \ell(a_0, a_1, \sigma^2, \lambda)
+& = -\sum_{y=2013}^{2016} \nabla_a
+\frac{(T^{(y)} - Ma)^T \Gamma^{-1} (T^{(y)} - Ma)}{2\sigma^2}
+\\ \notag &
+= -\sum_{y=2013}^{2016} 2  \frac{M^T\Gamma^{-1} (T^{(y)} - Ma)}{2\sigma^2}
+\\ \notag &
+= -\sum_{y=2013}^{2016}  \frac{M^T\Gamma^{-1} (T^{(y)} - Ma)}{\sigma^2}
+\end{align}
+
+To solve for $a$, we can set $\nabla_a \ell(a_0, a_1, \sigma^2, \lambda)=0$:
+\begin{align}
+-\sum_{y=2013}^{2016}  \frac{M^T \Gamma^{-1} (T^{(y)} - Ma)}{\sigma^2} & = 0
+\\ \notag
+\sum_{y=2013}^{2016} M^T \Gamma^{-1} (T^{(y)} - Ma) & = 0
+\\ \notag
+\sum_{y=2013}^{2016} M^T \Gamma^{-1} Ma & = \sum_{y=2013}^{2016} M^T \Gamma^{-1} T^{(y)}
+\\ \notag
+4 M^T \Gamma^{-1} Ma & = \sum_{y=2013}^{2016} M^T \Gamma^{-1} T^{(y)}
+\end{align}
+and then finally,
+\begin{equation}
+a = \frac{1}{4} \sum_{y=2013}^{2016} (M^T \Gamma^{-1} M)^{-1} M^T \Gamma^{-1} T^{(y)}.
+\end{equation}
+
+Then taking the partial the log-likelihood with respect to $\sigma^2$,
+\begin{align}
+\frac{\partial}{\partial \sigma^2} \ell(a_0, a_1, \sigma^2, \lambda)
+& = -\frac{\partial}{\partial \sigma^2} \frac{122(4)}{2} \log(2 \pi \sigma^2 \text{det} \Gamma) -\sum_{y=2013}^{2016} \frac{\partial}{\partial \sigma^2}
+\frac{(T^{(y)} - Ma)^T \Gamma^{-1} (T^{(y)} - Ma)}{2\sigma^2}
+\\ \notag & =
+-\frac{122(4)}{2\sigma^2}  + \sum_{y=2013}^{2016} 
+\frac{(T^{(y)} - Ma)^T \Gamma^{-1} (T^{(y)} - Ma)}{2(\sigma^2)^2}.
+\end{align}
+
+Setting, $\frac{\partial}{\partial \sigma^2} \ell(a_0, a_1, \sigma^2, \lambda)=0$,
+\begin{align}
+-\frac{122(4)}{2\sigma^2}  + \sum_{y=2013}^{2016}
+\frac{(T^{(y)} - Ma)^T \Gamma^{-1} (T^{(y)} - Ma)}{2(\sigma^2)^2} & = 0
+\\ \notag
+\frac{122(4)\sigma^2}{2} & = \sum_{y=2013}^{2016}
+\frac{(T^{(y)} - Ma)^T \Gamma^{-1} (T^{(y)} - Ma)}{2},
+\end{align}
+and solving for $\sigma^2$ leads to,
+\begin{equation}
+\sigma^2
+= \frac{1}{122(4)} \sum_{y=2013}^{2016}
+(T^{(y)} - Ma)^T \Gamma^{-1} (T^{(y)} - Ma).
+\end{equation}
+
+```{r, cache=T}
+d <- read.csv("temperatures.csv")
+days <- 1:122
+# I'll keep the temps as a 122 by 4 matrix, each column is a year
+temps <- sapply(2013:2016, function(y) 
+          dplyr::filter(d, year==y)$temp)
+
+compute_Gamma <- function(days, lambda)
+{
+  Gamma <- ConstructSigma(days, sigma2=1, lambda)
+  return (Gamma)
+}
+
+# Log-likelihood
+logL <- function(days, temps, a, s2, lambda)
+{
+  Gamma <- compute_Gamma(days, lambda)
+  Gi <- solve(Gamma)
+  M <- cbind(rep(1,122), days)
+  
+  term1 <- -122*4/2*log(2*pi*s2) - 2*log(det(Gamma))
+  term2 <- 0
+  for (i in 1:4) {
+    ey <- temps[,i] - M %*% a
+    term2 <- term2 - (t(ey) %*% Gi %*% ey)/(2*s2)
+  }
+  return (term1 + term2)
+}
+
+
+# solve for a and s2 given lambda
+compute_aANDs2 <- function(days, temps, lambda)
+{
+  Gamma <- compute_Gamma(days, lambda)
+  
+  M <- cbind(rep(1,122), days)
+  Gi <- solve(Gamma)
+  Z <- solve(t(M) %*% Gi %*% M) %*% t(M) %*% Gi
+  
+  a <- 0
+  for (i in 1:4) 
+    a <- a + Z %*% temps[,i]
+  a <- a/4
+  
+  Ma <- M %*% a
+  s2 <- 0
+  for (i in 1:4) {
+    Ti <- temps[,i]
+    s2 <- s2 + t(Ti - Ma) %*% Gi %*% (Ti - Ma)
+  }
+  s2 <- s2/(122*4)
+  
+  return (list(a=a, s2=s2))
+}
+
+# I'll generate a grid of lambdas, find optimum a,s2 and compute logL
+lambda <- seq(.01, .5, .01)
+logL_lambda <- numeric(length(lambda))
+for (i in 1:length(lambda)) {
+  aANDs2 <- compute_aANDs2(days, temps, lambda[i])
+  a <- aANDs2$a; s2 <- aANDs2$s2
+  logL_lambda[i] <- logL(days, temps, a, s2, lambda[i])
+}
+
+plot(lambda, logL_lambda)
+```
+
+Let's get the optimum's
+```{r,cache=T}
+# best lambda
+best_lambda <- lambda[which.max(logL_lambda)]
+best_aANDs2 <- compute_aANDs2(days, temps, best_lambda)
+best_a <- best_aANDs2$a
+best_s2 <- best_aANDs2$s2
+
+# optimal values
+best_lambda
+best_a
+best_s2
+```
+
+Plugging these in, we have the model,
+\begin{equation}
+\text{temperature}(t) \approx 22.3 + .12 t + X(t)
+\end{equation}
+where $X(t)$ is a Guassian process with covariance function $r(t) = 10.6\exp[-.2t]$.
+
+Looking at the linear regression part, we start at roughly $22$ degrees C and in three months rise to roughly $22 + .12*122 = 36.6$ degrees C.  Plotting the data for the first year, shows that this is roughly what the data shows,
+```{r,cache=T}
+plot(days, temps[,1])
+```
+
+The covariance function tells us that on any given day the temperature has variance $10.6$, corresponding to a standard deviation of roughly $3.25$.  Assuming that most of the time we stay within two standard deviations, this gives temperature deviations of roughly $7.5$ C on a given day across the years.  This seems to roughly agree with the data.  Finally, if we want to know when temperature loses it's correlation, ignoring the linear component, we can ask when, somewhat arbitrarily, $r(t) < 5$.  In this case we're asking when the covariance collapses to $1/2$ the variance.    Solving this relation gives $t=3.4$, meaning that within 3-4 days, we lose half the temperature correlation.  This too seems reasonable.   (We could check these results more carefully by computing the covariances of the residuals.)

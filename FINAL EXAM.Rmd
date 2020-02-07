@@ -1,0 +1,700 @@
+---
+title: "FINAl"
+author: "Zijing Gao"
+date: "2019/12/10"
+output: word_document
+---
+
+```{r}
+library(dplyr)
+```
+
+# Question 1
+
+## (a)
+
+$$
+\begin{split}
+P(X) &= P(A,S,T,C,B,E,R,D) \\
+&= P(D|E,B)P(A,S,T,C,B,E,R) \\
+&= P(D|E,B)P(R|E)P(A,S,T,C,B,E) \\
+&= P(D|E,B)P(R|E)P(E|T,C)P(T|A)P(A)P(C|S)P(B|S)P(S)
+\end{split}
+$$
+
+
+So, $P(X)$ is completely determined for all $X$ in the sample space of X.
+
+the simplier form is 
+
+$$
+\begin{split}
+\Phi(A)\Phi(T,A)\Phi(R,E)\Phi(E,T,C)\Phi(D,E,B)\Phi(C,S)\Phi(B,S)\Phi(S)
+\end{split}
+$$
+
+
+For example, $\Phi(A) = P(A), \Phi(T,A) = P(T|A)$.
+
+
+
+## (b)
+
+### i
+
+
+
+
+Firstly, we plug in the corresponding probabilities from the table into the stationary distribution.
+
+
+
+```{r}
+
+# MH sampler
+
+stationary_dist = function(X){
+  a = X[1];s = X[2];d = X[3];r = X[4];b = X[5];c = X[7];t = X[8];e = min(1,c+t)
+  p.a = ifelse(a == 1,0.01,0.99)
+  p.ta <- if(a==1){
+    ifelse(t==1, 0.05, 0.95)
+  }else{
+    ifelse(t==1, 0.01, 0.99)
+  }
+  p.s = 0.5
+  p.cs <- if(s==1){
+    ifelse(c==1, 0.1, 0.9)
+  }else{
+    ifelse(c==1, 0.01, 0.99)
+  }
+
+  p.bs <- if(c==1){
+    ifelse(b==1, 0.6, 0.4)
+  }else{
+    ifelse(b==1, 0.3, 0.7)
+  }
+
+  p.re <- if(e==1){
+    ifelse(r==1, 0.98, 0.02)
+  }else{
+    ifelse(r==1, 0.05, 0.95)
+  }
+
+  p.deb <- if(b==1 & e==1){
+    ifelse(d==1, 0.9, 0.1)
+  } else if(b==0 & e==1){
+    ifelse(d==1, 0.7, 0.3)
+  } else if(b==1 & e==0){
+    ifelse(d==1, 0.8, 0.2)
+  } else{
+    ifelse(d==1, 0.1, 0.9)
+  }
+  res = prod(p.a, p.ta, p.s, p.cs, p.bs, p.re, p.deb)
+  return(res)
+}
+
+```
+
+
+
+
+```{r}
+MH_sampler = function(start_X,time_steps){
+  
+  X = start_X
+  X[6] = min(1,X[7]+X[8]) # e is determined by c and T from the table
+  n = length(X)
+  path = matrix(0, nrow = time_steps, ncol = n)
+  
+  for(i in 1:time_steps){
+    path[i,] = X
+    
+    # proposal
+    flip = sample.int(n,1)
+    p_x = X
+    p_x[flip] = ifelse(p_x[flip] == 1,0,1)
+    
+    # MH ratio
+    mh_ratio = exp(log(stationary_dist(p_x)) - log(stationary_dist(X)))
+    
+    if(runif(1)<mh_ratio)
+      X = p_x
+  }
+  
+  colnames(path) = c("A","S","D","R","B","E","C","T")
+  
+  return(path)
+}
+
+```
+
+```{r}
+# test
+start_X = sample(c(1,0),8, replace = TRUE)
+
+mysampler = MH_sampler(start_X,10)
+mysampler
+```
+
+
+I use it to compute $P(R=1|A,S,D)$
+
+
+```{r}
+P.rasd = function(X_rest,ASD){
+  start_X = c(ASD,X_rest)
+  mh = MH_sampler(start_X, time_steps = 500000)
+  mh = as.data.frame(mh[300000:500000,]) # burn-in
+  m_ASD = mh %>% select(A,S,D,R) %>% filter(A == ASD[1] & S == ASD[2] & D == ASD[3])
+  
+  m_R = m_ASD %>% filter(R == 1)
+  
+  prob = nrow(m_R)/nrow(m_ASD)
+  return(prob)
+}
+
+X_rest = sample(c(1,0),5,replace = TRUE)
+ASD = c(1,0,1)
+estimate_P = P.rasd(X_rest,ASD)
+estimate_P
+```
+
+## (b)
+
+### (ii)
+
+Using the relation, we have 
+
+$$
+\begin{split}
+P(R = 1|A=1,S=0,D=1) = \frac{P(R = 1,A=1,S=0,D=1)}{P(A=1,S=0,D=1)}
+\end{split}
+$$
+
+
+$$
+\begin{split}
+P(R=1|A,S,D) &= P(A) \sum_{A} P(T|A) \left[\sum_{E}P(R|E) \left[\sum_{C}P(E|T,C)\left[\sum_{B}P(D|E,B)\left[\sum_{S}P(C|S)P(B|S)P(S)\right]\right]\right]\right]
+\end{split}
+$$
+
+The numeriator is 
+
+$$
+\begin{split}
+P(R = 1,A=1,S=0,D=1) = \sum_{T=0}^{1}\sum_{C=0}^{1}\sum_{B=0}^{1}\sum_{E=0}^{1}P(X)
+\end{split}
+$$
+
+The denominator is 
+
+
+
+$$
+\begin{split}
+P(A=1,S=0,D=1) = \sum_{R=0}^{1}\sum_{T=0}^{1}\sum_{C=0}^{1}\sum_{B=0}^{1}\sum_{E=0}^{1}P(X)
+\end{split}
+$$
+
+
+
+```{r}
+m_numerator = cbind(A = 1,S = 0,D = 1,R = 1,expand.grid(B=0:1,E=0:1,C=0:1,T=0:1))
+
+m_denominator = cbind(A = 1,S = 0,D = 1,expand.grid(R=0:1,B=0:1,E=0:1,C=0:1,T=0:1))
+
+numerator = apply(m_numerator,1,stationary_dist) %>% sum
+denominator = apply(m_denominator,1,stationary_dist) %>% sum
+
+actual_p = numerator/denominator
+actual_p
+```
+
+
+
+
+
+# Question 2
+
+## (a)
+
+### i
+
+```{r}
+dat = read.csv("grades.csv")
+```
+
+```{r}
+myPCA = prcomp(dat)
+# center and scale refers to respective mean and standard deviation of the variables that are used for normalization prior to implementing PCA
+```
+
+Here is PCA function 
+
+```{r}
+
+mypca <- function(X) {
+  
+  
+  N <- nrow(X)
+  mu <- colMeans(X); 
+  tildeX <- apply(X, 1, function(xi) xi - mu) %>% t
+
+  Sigma <- 1/N*t(tildeX) %*% tildeX
+  eigen.out <- eigen(Sigma)
+  
+  # get first two eigenvectors for part (ii)
+  Q <- eigen.out$vectors[,1:2]
+  # get all eigenvalues for part (i)
+  ev <- eigen(Sigma)$values
+  print(ev)
+  
+  plot(cumsum(ev)/sum(ev), xlab="K", ylab="fraction of var", ylim=c(0,1),type = "b")
+  
+  c <- tildeX %*% Q
+  
+  # part (iii)
+  cov_c <- cov(c)
+  cat("mean of c1 and c2", mean(c[,1]), mean(c[,2]), "\n")
+  cat("covariance of c1 and c2", cov_c[1,2], "\n")
+  cat("variance of c1 and c2", mean(c[,1]^2), mean(c[,2]^2), "\n")
+  cat("first two eigenvalues", ev[1:2], "\n")
+  
+}
+
+mypca(dat)
+
+```
+
+
+
+```{r}
+dev = myPCA$sdev
+
+var = dev^2
+
+prop_var = var/sum(var)
+
+plot(prop_var, xlab = "Principal Component",
+             ylab = "Proportion of Variance Explained",
+             type = "b")
+
+plot(cumsum(prop_var), xlab = "Principal Component",
+              ylab = "Cumulative Proportion of Variance Explained",
+              type = "b")
+```
+
+From the plot, we can see that almost 90% variance in the data set can be explained by 2 components.
+
+
+### ii
+
+```{r}
+library(corrplot)
+corr = cor(dat)
+corrplot(corr, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+corr
+```
+
+Here is my own correlation matrix function.
+
+We know that
+
+$$r_{xy} = \frac{\sum(x_i-\bar x)(y_i-\bar y)}{\sqrt{\sum(x_i-\bar x)^2 \sum(y_i-\bar y)^2}}$$
+
+```{r}
+# correlation matrix
+mycorr = function(X){
+  corr_m = matrix(0,nrow = ncol(X), ncol = ncol(X))
+  for(i in 1:ncol(X)){
+    for(j in 1:ncol(X)){
+      numerator = sum((X[,i]-mean(X[,i]))*(X[,j]-mean(X[,j])))
+      denominator = (sum((X[,i]-mean(X[,i]))^2) * sum((X[,j]-mean(X[,j]))^2)) %>% sqrt
+      corr_m[i,j] = numerator/denominator
+    }
+  }
+  colnames(corr_m) = colnames(X)
+  row.names(corr_m) = colnames(X)
+  return(corr_m)
+}
+
+mycorr(dat)
+```
+
+### iii
+
+
+```{r}
+# step 1 bin the data
+
+data_bin = function(X){
+  X = X[,1:16-1] 
+  # Since the weighted total are not integers, I assume I could not find the joint probability.
+  # It is meaningless to compute the MI of it because they are all different.
+  n = ncol(X)
+  for (i in 1:n) {
+    c <- quantile(X[,i], seq(0,1,0.05))
+    gbin <- as.numeric(cut(X[,i], breaks = unique(c),
+    include.lowest = TRUE))
+    X[,i] <- gbin
+  }
+  return(X)
+}
+```
+
+
+```{r}
+
+# step 2 compute entropy of each pair
+
+MyEntropy = function(X){
+  p = table(X)/length(X)
+  res = -sum(p*log(p))
+  return(res)
+}
+
+```
+
+
+```{r}
+# step 3 compute the mutual information of each pair 
+
+MI = function(X,Y,method = "standard"){
+  res = 0
+  for(x in unique(X)){
+    for(y in unique(Y)){
+      pxy <- mean(X==x & Y==y)
+      if(pxy!=0){
+        px <- mean(X==x)
+        py <- mean(Y==y)
+        res <- res + pxy * log(pxy/px/py)
+      }
+    }
+  }
+  
+  if(method == "normalized")
+    res = 2*res/(MyEntropy(X)+MyEntropy(Y)) # normalize the MI if needed
+  return(res)
+}
+```
+
+```{r}
+# step 4 compute the mutual information matrix
+
+MIM = function(X,method = "standard"){
+  X = data_bin(X) 
+  n = ncol(X)
+  M = matrix(0,nrow = n, ncol = n)
+  for(i in 1:n){
+    for(j in 1:n){
+      M[i,j] = MI(X[,i],X[,j],method = method)
+    }
+  }
+  row.names(M) = colnames(X)
+  colnames(M) = colnames(X)
+
+  return(M)
+}
+
+mutual_info_matrix = MIM(dat,method = "normalized")
+mutual_info_matrix
+```
+
+
+## (b)
+
+we want to compute the distribution of the weighted total conditioned on the first six homework grades.
+
+
+$$P(weighted\ total|X_{16})$$
+
+where $X_{16}$ is $X_1,X_2,X_3,X_4,X_5,X_6$
+
+
+In this case, we have
+
+$$
+\begin{split}
+Weighted\ Total = 0.7\ [X_1,...,X_{14}] + 0.3\ final
+\end{split}
+$$
+
+And we try to use normal equation and lm() to analyse the weighted total by using $X_1,X_2,X_3,X_4,X_5,X_6$.
+
+
+
+
+```{r}
+# MLE estimate
+
+dat$average_hw = rowMeans(dat[,1:14])
+X_16 = dat[,1:6]
+mu_16 = X_16
+mu_16[,1:6] = rowMeans(X_16)
+
+# final ~ HW1-HW6
+
+y1 = dat$final_exam
+B = cbind(rep(1,length(y1)), dat[,1:6] %>% as.matrix)
+
+a1 = solve(t(B) %*% B, t(B) %*% y1) %>% as.numeric
+sigma2 = mean((y1 - B %*% a1)^2)
+
+MLE_1 = c(a1,sigma2) %>% setNames(c(paste0('a',0:6),"sigma2"))
+MLE_1
+```
+
+
+```{r}
+# average ~ HW1-HW6
+
+y2 = dat$average_hw
+a2 = solve(t(B) %*% B, t(B) %*% y2) %>% as.numeric
+sigma2 = mean((y2 - B %*% a2)^2)
+
+MLE_2 = c(a2,sigma2) %>% setNames(c(paste0('a',0:6),"sigma2"))
+MLE_2
+```
+
+```{r}
+# weighted total ~ HW1-HW6
+
+y3 = dat$weighted_total
+a3 = solve(t(B) %*% B, t(B) %*% y3) %>% as.numeric
+sigma2 = mean((y3 - B %*% a3)^2)
+
+MLE_3 = c(a3,sigma2) %>% setNames(c(paste0('a',0:6),"sigma2"))
+MLE_3
+```
+
+Here, I try to take Bayesian approach to esitimate the paramters.
+
+```{r,cache=T}
+# compute log posterior probability 
+log_posterior <- function(theta, y, B)
+{
+  a <- theta[1:7]
+  s2 <- theta[8]
+  
+  # get log priors
+  fa <- dnorm(a, mean=0, sd=10, log=T) %>% sum
+  fs2 <- -s2
+  
+  likeli <- dnorm(y - B %*% a, mean=0, sd=sqrt(s2), log=T) %>% sum
+  
+  return (fa + fs2 + likeli)
+}
+
+MH <- function(theta, y, B, iter=1E4)
+{
+  theta_m <- matrix(0, nrow=iter, ncol=8)
+  
+  for (i in 1:iter) {
+    p_theta <- theta + rnorm(8, mean=0, sd=0.5)
+    p_theta[8] <- abs(p_theta[8])
+    
+    # proposal is symmetric, so the ratio R_ps/R_sp = 1 
+    MH_ratio <- exp(log_posterior(p_theta,y,B) - log_posterior(theta,y,B))
+    if (runif(1) < MH_ratio)
+      theta <- p_theta
+    
+    theta_m[i,] <- theta
+    
+  }
+  
+  colnames(theta_m) <- c(paste0('a',0:6),"sigma2")
+  return (theta_m)
+}
+
+# test
+theta <- sample(1:10,8)
+y = y3
+MH(theta, y, B, iter=10)
+```
+
+Looks reasonable, let's run for a while...
+```{r,cache=T}
+m <- MH(theta, y, B, iter=1E5)
+```
+
+Just to check for convergence, let's plot the $a_0$ values
+```{r,cache=T}
+plot(1:nrow(m), m[,"a0"], xlab="MH iteration", ylab="a0", type="l")
+```
+
+It does not seem to comply with the value of $a_0$ I just computed.
+
+But, we can model the expected value of y as a linear function of 6 explanatory variables like this.
+
+
+$$E[weighted\ total|X_1,...,X_6] = a_0+a_1X_1+...+a_6X_6$$
+
+```{r}
+MLE_3.matrix = matrix(0,ncol = 7,nrow = 147)
+for(i in 1:147)
+  MLE_3.matrix[i,] = MLE_3[-8] # keep out sigma2
+
+wt.pred = rowSums(MLE_3.matrix * B)
+```
+
+
+```{r}
+# here I write bin function again
+mybin = function(X){
+  c <- quantile(wt.pred, seq(0,1,0.05)) # bin the data
+  bin <- as.numeric(cut(wt.pred, breaks = unique(c),
+    include.lowest = TRUE))
+  return(bin)
+}
+```
+
+```{r}
+# so, I use table to compute the frequency of weighted total given HW1-6
+
+bin = mybin(wt.pred)
+freq = table(bin)/sum(table(bin)) %>% as.vector
+freq
+```
+
+
+I also use linear regression model to fit the data.
+
+
+```{r}
+lm1 = lm(average_hw~HW1+HW2+HW3+HW4+HW5+HW6, data = dat)
+lm2 = lm(final_exam~HW1+HW2+HW3+HW4+HW5+HW6, data = dat)
+lm3 = lm(weighted_total~HW1+HW2+HW3+HW4+HW5+HW6, data = dat)
+```
+
+
+```{r}
+WeightedTotalDistribution = function(X,method = "bin_prob"){
+    res = 0.7 * predict(lm1,X) + 0.3 * predict(lm2, X)
+    bin = mybin(res)
+    
+    freq = table(bin)/sum(table(bin)) %>% as.vector
+    
+    if(method == "pred_value")
+      return(res)
+      
+    return(freq)
+}
+WeightedTotalDistribution(mu_16)
+
+```
+
+
+## (c)
+
+### i
+
+Now, I compute $E[weighted\ total|X_1,...,X_6]$
+
+As is mentioned above, we can use the linear regression to model the expected value of weighted total given $X_1,...,X_6$.
+
+
+```{r}
+E.X16 <- WeightedTotalDistribution(X_16,method = "pred_value")
+E.X16
+
+plot(y = E.X16, x = dat$weighted_total, xlab = "Weighted Total", ylab = "E(weighted total|X1 - X6)")
+abline(fit1 <-lm(E.X16~dat$weighted_total),col=2)
+```
+
+
+
+```{r}
+E.mu16 <- WeightedTotalDistribution(mu_16,method = "pred_value")
+E.mu16
+
+plot(y = E.mu16,x = dat$weighted_total,xlab = "Weighted Total", ylab = "E(weighted total|mu_16)")
+abline(fit2 <-lm(E.mu16~dat$weighted_total),col=2)
+
+```
+
+
+```{r}
+# X1,...X6
+summary(fit1)
+```
+
+From the summary, I find that Multiple R-squared is 0.8585 and Adjusted R-squared is 0.8576 and the std error for each estimator are 2.38820 and 0.02905
+
+```{r}
+# mu_16
+summary(fit2)
+```
+
+From the summary, I find that Multiple R-squared is 0.7025 and Adjusted R-squared is 7004. They are both smaller than values in the previous model, suggesting that the model using $X_1,...,X_6$ fits better with greater accuracy.
+
+Also, the std error for each estimator are 2.90906 and 0.03539, which are both bigger than the values in the previous model.
+
+So, I think it is better to use $X_1,...,X_6$ to predict the weighted total than to use the student's average over the first 6 homework.
+
+
+## multivariate normal
+
+
+
+
+```{r}
+mu_hat <- colMeans(dat)
+Sigma_hat <- cov(dat)
+# fit the model and estimate the parameters
+mu_w <- mu_hat[16]
+mu_16 <- mu_hat[1:6]
+Sigma11 <- Sigma_hat[16,16]
+Sigma12 <- Sigma_hat[16, 1:6]
+Sigma22 <- Sigma_hat[1:6,1:6]
+# get the distribution
+WeightedTotalDistribution <- function(X16){
+    mu <- mu_w + Sigma12 %*% solve(Sigma22) %*% t(X16-mu_16)
+    sigma2 <- Sigma11 - t(Sigma12) %*% solve(Sigma22) %*% Sigma12
+    return(function(x) {dnorm(x,mu, sqrt(sigma2))})
+}
+
+
+curve(WeightedTotalDistribution(dat[1,1:6])(x),
+      xlim=c(50,150),
+      main="Distribution of weighted total for the first student",
+      ylab = "")
+
+```
+
+
+```{r}
+curve(WeightedTotalDistribution(dat[2,1:6])(x),
+    xlim=c(50,150),
+    main="Distribution of weighted total for the second student",
+    ylab = "")
+```
+
+
+```{r}
+predict_w <- function(X16){
+    return(mu_w + Sigma12 %*% solve(Sigma22) %*% (X16-mu_16))
+}
+pred_X16 <- apply(dat[,1:6],1,predict_w)
+plot(dat$weighted_total, pred_X16,
+    main="prediction based on X16",
+    xlab="true value", ylab="predicted value")
+MSE1 <- mean((dat$weighted_total-pred_X16)^2)
+MSE1
+```
+
+
+```{r}
+mu16 <- dat[,1:6]
+mu16[,1:6] <- rowMeans(mu16)
+pred_mu16 <- apply(mu16,1,predict_w)
+plot(dat$weighted_total, pred_mu16,
+    main="prediction based on mu16",
+    xlab="true value", ylab="predicted value")
+
+
+MSE2 <- mean((dat$weighted_total-pred_mu16)^2)
+MSE2
+```
+
+By comparing the MSE of each model, I think $E(WT|X_16)$ is better since its MSE is samller.

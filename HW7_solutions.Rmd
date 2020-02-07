@@ -1,0 +1,206 @@
+---
+title: "Homework 7"
+author: "Zijing Gao"
+output: pdf_document
+---
+
+# Problem 1
+
+```{r}
+library(dplyr, quietly = T)
+library(plyr, quietly = T)
+library(ggplot2, quietly = T)
+```
+
+## (a)
+
+This result follows by the associativity of matrix multiplication, i.e. $A(BC) = (AB)C$. We also need the commutivity of the dot product $u \cdot v = v \cdot u$.
+\begin{equation}
+(a \cdot b)^2= (a^T b)^2 = (a^T b)(a^Tb) = (a^T b) (b^T a) = a^T b b^T a = a^T (b b^T) a = a^T M a
+\end{equation}
+
+## (b)
+
+### first form
+
+Let $M = \tilde(X)^T \tilde(X)$.  I'll show $M_{kj} = \hat{\Sigma}_{kj}$ and therefore $M = \hat{\Sigma}$.
+\begin{equation}
+M_{kj} = \sum_{i=1}^N \tilde{X}^T_{k i} \tilde{X}_{i j}
+= \sum_{i=1}^N \tilde{X}_{i k} \tilde{X}_{i j}
+= \sum_{i=1}^N (X^{(i)}_k - \mu_k)(X^{(i)}_j - \mu_j)
+= \hat{\Sigma}_{kj}
+\end{equation}
+
+### second form
+
+Now let $M = \sum_{i=1}^N \sum_{i=1}^N (X^{(i)} - \mu)(X^{(i)} - \mu)$.  Notice $M$ is the sum of $N$ matrices.  Then $M_{kj}$ is the sum of the $kj$ entries of those matrices:
+\begin{equation}
+M_{kj} = \sum_{i=1}^N \sum_{i=1}^N \left[ (X^{(i)} - \mu)(X^{(i)} - \mu) \right]_{kj}
+\end{equation}
+The matrices inside the sum are of the form $a^T a$.  The $kj$ entry of such a matrix is $a_k a_j$.  Plugging this in gives,
+\begin{equation}
+M_{kj} = \sum_{i=1}^N \sum_{i=1}^N  (X^{(i)}_k - \mu_k)(X^{(i)}_j - \mu_j) = \hat{\Sigma}_{kj}
+\end{equation}
+
+## (c)
+
+We choose the $c_i$ and $w^{(1)}$ to minimize the following function,
+\begin{equation}
+\ell(c_1, c_2, \dots, c_N, w^{(1)}) = \sum_{i=1}^N \|X^{(i)} - \mu - c_i w^{(1)}\|^2
+\end{equation}
+with the constraint that $\|w^{(1)}\| = 1$ 
+
+We'll want to take the partials of $\ell$ and set to zero, but first let's exand out the squared norm.
+\begin{align}
+\|X^{(i)} - \mu - c_i w^{(1)}\|^2 
+&= (X^{(i)} - \mu - c_i w^{(1)}) \cdot (X^{(i)} - \mu - c_i w^{(1)})
+\\ \notag
+&= (X^{(i)} - \mu) \cdot (X^{(i)})X^{(i)} - \mu) - 
+2 c_i (w^{(1)} \cdot (X^{(i)} - \mu)) - c_i^2 (w^{(1)} \cdot w^{(1)})
+\\ \notag
+&= \|X^{(i)} - \mu\|^2 - 2 c_i (w^{(1)} \cdot (X^{(i)} - \mu)) + c_i^2
+\end{align}
+
+Plug this back into the equation for $\ell$ to give,
+\begin{equation}
+\ell(c_1, c_2, \dots, c_N, w^{(1)}) = \sum_{i=1}^N \|X^{(i)} - \mu\|^2 - 2 c_i (w^{(1)} \cdot (X^{(i)} - \mu)) + c_i^2
+\end{equation}
+
+Taking the $c_k$ partial gives
+\begin{equation}
+\frac{\ell(c_1, c_2, \dots, c_N, w^{(1)})}{\partial c_k} =
+-2 (w^{(1)} \cdot (X^{(i)} - \mu)) + 2 c_i
+\end{equation}
+and setting equal to $0$ gives $c_i = w^{(1)} \cdot (X^{(i)} - \mu)$
+
+If we plug $c_i$ back into the formula for $\ell$, we can express $\ell$ in a simple form that will be useful as we go forward.
+\begin{align}
+\ell(c_1, c_2, \dots, c_N, w^{(1)}) & = \sum_{i=1}^N \|X^{(i)} - \mu\|^2 - 2 c_i (w^{(1)} \cdot (X^{(i)} - \mu)) + c_i^2 =
+ \sum_{i=1}^N \|X^{(i)} - \mu\|^2 - (w^{(1)} \cdot (X^{(i)} - \mu))^2
+ \\ \notag
+ & =  \sum_{i=1}^N \|X^{(i)} - \mu\|^2 - (w^{(1)})^T (X^{(i)} - \mu) (X^{(i)} - \mu)^T w^{(1)},
+\end{align}
+
+where I used part (a) in the last line.  We can drop the terms $\|X^{(i)} - \mu\|^2$ since they're constants that don't effect the values of $w^{(1)}$ and $c_i$ that minimize $\ell$.  Doing that gives,
+\begin{equation}
+\ell(w^{(1)}) =
+-\sum_{i=1}^N  (w^{(1)})^T (X^{(i)} - \mu) (X^{(i)} - \mu)^T w^{(1)}
+= -(w^{(1)})^T \left( \sum_{i=1}^N  (X^{(i)} - \mu) (X^{(i)} - \mu)^T \right) w^{(1)}
+= -N (w^{(1)})^T \hat{\Sigma} w^{(1)}
+\end{equation}
+where I've used part (b) in the last line.
+
+Now using this form of $\ell(w^{(1)})$, let's find the optimal $w^{(1)}$.
+For $w^{(1)}$ we need to account for the constraint, so I'll use Lagrange multipliers.  Setting $g(w^{(1)}) = w_1^2 + w_2^2 + \dots + w_n^2$, the constraint is given by $g(w^{(1)}) = 1$ and $\nabla g(w^{(1)}) = w^{(1)}$.  The taking the gradient of $\ell$ with respect to the coordinates of $w^{(1)}$ we have
+\begin{equation}
+\nabla \ell(w^{(1)}) = -2N \hat{\Sigma} w^{(1)},
+\end{equation}
+where I've used the result (covered in a previous hw) that $\nabla x^TAx = 2Ax$ for a vector $x$ and matrix $A$ where the gradient is with respect to $x$.
+
+The optimum satisfies the lagrange condition
+\begin{equation}
+\nabla \ell(w^{(1)}) = \rho \nabla g(w^{(1)})
+\end{equation}
+for some Lagrange multiplier $\rho$.   Plugging in the gradients gives,
+\begin{equation} 
+-2N \hat{\Sigma} w^{(1)} = \rho w^{(1)}
+\end{equation}
+or rearranging,
+\begin{equation} 
+ \hat{\Sigma} w^{(1)} = -\frac{\rho}{2N} w^{(1)}.
+\end{equation}
+
+We have found that $w^{(1)}$ is an eigenvector of $\hat{\Sigma}$, but which one?   $\hat{\Sigma}$ is symmetric and so will have $n$ eigenvectors.  We plug back into $\ell(w^{(1)})$ to find the one that minimizes $\ell$.  Let $w^{(1)} = q^{(i)}$ where $q^{(i)}$ is the $i$th eigenvector of $\hat{\Sigma}$.
+\begin{equation}
+\ell(w^{(1)}) = -N (w^{(1)})^T \hat{\Sigma} w^{(1)}
+= =N (w^{(1)})^T (\lambda_i w^{(1)}) = -N \lambda_i
+\end{equation}
+To minimize this expression, we choose the eigenvector of $\hat{\Sigma}$ with the largest eigenvalue.
+
+
+Finally, let's compute the mean and variance of the $c_i$.  First the mean,
+\begin{equation}
+\frac{1}{N} \sum_{i=1}^N c_i = \frac{1}{N} \sum_{i=1}^N w^{(1)} \cdot (X^{(i)} - \mu)
+= w^{(1)} \cdot \left( \frac{1}{N} \sum_{i=1}^N (X^{(i)} - \mu) \right)
+= w^{(1)} \cdot \left( 0 \right) = 0
+\end{equation}
+
+Now the variance,
+\begin{equation}
+\frac{1}{N} \sum_{i=1}^N c_i^2 = \frac{1}{N} \sum_{i=1}^N (w^{(1)} \cdot (X^{(i)} - \mu))^2
+= \frac{1}{N} \sum_{i=1}^N (w^{(1)})^T  (X^{(i)} - \mu)(X^{(i)} - \mu)^T w^{(1)}
+= w^{(1)} \hat{\Sigma} w^{(1)} = \lambda_1
+\end{equation}
+
+# Problem 2
+
+## (a)
+
+The first datafile has $2$ base times series with noise added.  The noise doesn't favor a particular direction, since I added iid noise to each of the $20$ coordinates, so we cannot expect the noise in the data to have a particular direction in which a PCA can capture a considerable portion of the variance.  Ignoring the noise, we have two time series, the variation cause by two time series can be captured by a $1-d$ PCA because a line can go through two points.  So the best dimension for the first times series is $1$.
+
+The second datafile has $3$ times series with noise added.  We need $2$ dimensions to capture three points, so the best dimension is $2$.  Similarly, for the last datafile involving $4$ time series the best dimension is $3$.
+
+## (b)
+
+### first time series
+
+```{r}
+# first time series
+PCA_analysis <- function(datafile_num) {
+  file <- paste("TimeSeries_K", datafile_num, ".csv", sep="")
+  m <- read.csv(file) %>% as.matrix
+  
+  file <- paste("assignments_K", datafile_num, ".csv", sep="")
+  assignments <- read.csv(file)[,1]
+  
+  N <- nrow(m)
+  mu <- colMeans(m); 
+  tildeX <- apply(m, 1, function(xi) xi - mu) %>% t
+
+  Sigma <- 1/N*t(tildeX) %*% tildeX
+  eigen.out <- eigen(Sigma)
+  
+  # get first two eigenvectors for part (ii)
+  Q <- eigen.out$vectors[,1:2]
+  # get all eigenvalues for part (i)
+  ev <- eigen(Sigma)$values
+  print(ev)
+  
+  # part (i)
+  plot(cumsum(ev)/sum(ev), xlab="K", ylab="fraction of var", ylim=c(0,1))
+  
+  # part (ii), I added assignment color 
+  c <- tildeX %*% Q
+  plot(c[,1], c[,2], xlab="PCA1", col=assignments, ylab="PCA2")
+  
+  # part (iii)
+  cov_c <- cov(c)
+  cat("mean of c1 and c2", mean(c[,1]), mean(c[,2]), "\n")
+  cat("covariance of c1 and c2", cov_c[1,2], "\n")
+  cat("variance of c1 and c2", mean(c[,1]^2), mean(c[,2]^2), "\n")
+  cat("first two eigenvalues", ev[1:2], "\n")
+  
+}
+
+PCA_analysis(2)
+```
+
+Starting with part (i), notice with $K=1$ we capture roughly $0.5$ of the variance.  This reflects the variance associated with the two different time series.  Then as $K$ rises, we capture roughly $0.50/19$ of the remaning variance with each additional dimension.  Since the noise is isotropic (no particular preference in direction), adding an additional dimension can only capture $1/19$ of the noise's variance.   
+
+For part (ii), I added color distinguishing which time series the sample came from, although this was not availalbe on your homework.  The 2-d PCA separates the time series.  For part (iii), as the theory predicts, $c^{(i)}_1$ and $c^{(i)}_2$ have mean $0$ are uncorrelated and have variance given by $\lambda_1$ and $\lambda_2$, respectively.
+
+### second time series
+
+```{r}
+PCA_analysis(3)
+```
+
+Notice now we capture roughly half the variance  by $K=2$ since there are three time series.  We still are able to separate the time series in $K=2$.
+
+### third time series
+
+```{r}
+PCA_analysis(4)
+```
+
+Notice now we capture roughly half the variance only by $K=3$ since there are three time series.  Now, we are not able to separate all the clusters.

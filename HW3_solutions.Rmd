@@ -1,0 +1,403 @@
+---
+title: "Homework 3"
+author: "Zijing Gao"
+output: pdf_document
+---
+
+# Problem 1
+
+## (a)
+
+To make things a bit more symmetric, below let $p_2 = 1 - p_1$.
+\begin{align}
+\ell(\theta) & = \sum_{i=1}^N \log \left( P(\hat{X}_i \ | \ \theta) \right) \\
+ & = \sum_{i=1}^N \log
+ \left( p_1 \frac{1}{\sqrt{2 \pi \sigma_1^2}} \exp[-\frac{(\hat{X}_i - \mu_1)}{2 \sigma_1^2}] 
+  + p_2 \frac{1}{\sqrt{2 \pi \sigma_2^2}} \exp[-\frac{(\hat{X}_i - \mu_2)}{2 \sigma_2^2)}] \right)
+\end{align}
+
+Taking partials gives,
+\begin{equation}
+\nabla \ell(\theta) = \sum_{i=1}^N \frac{1}{p_1 \mathcal{N}(\hat{X}_i \ | \ \mu_1,\sigma_1^2) + 
+                                            p_2 \mathcal{N}(\hat{X}_i \ | \  \mu_2,\sigma_2^2)}
+\left(
+\begin{array}{c}
+p_1 \frac{\hat{X_i}-\mu_1}{\sigma_1^2} \mathcal{N}(\hat{X}_i \ | \ \mu_1,\sigma_1^2) \\
+p_2 \frac{\hat{X_i}-\mu_2}{\sigma_2^2} \mathcal{N}(\hat{X}_i \ | \ \mu_2,\sigma_2^2) \\
+p_1 (-\frac{1}{\sigma_1} + \frac{(\hat{X_i}-\mu_1)^2}{(\sigma_1^2)^\frac{3}{2}})
+\mathcal{N}(\hat{X}_i \ | \ \mu_1,\sigma_1^2) \\
+p_2 (-\frac{1}{\sigma_2} + \frac{(\hat{X_i}-\mu_2)^2}{(\sigma_2^2)^\frac{3}{2}})
+\mathcal{N}(\hat{X}_i \ | \ \mu_2,\sigma_2^2) \\
+\mathcal{N}(\hat{X}_i \ | \ \mu_1,\sigma_1^2) - \mathcal{N}(\hat{X}_i \ | \ \mu_2,\sigma_2^2)
+\end{array}
+\right),
+\end{equation}
+where $\mathcal{x \ | \ \mu, \sigma^2}$ is the pdf of $\mathcal{N}(\mu, \sigma^2)$ evaluated at $x$.
+
+```{r}
+library(dplyr, quietly = T)
+logL <- function(X, theta)
+{
+  p1 <- theta["p1"]; p2 <- 1-p1
+  mu1 <- theta["mu1"]; mu2 <- theta["mu2"]
+  s1 <- theta["sigma1"]; s2 <- theta["sigma2"]
+  
+  N1 <- dnorm(X, mean=mu1, sd=sqrt(s1))
+  N2 <- dnorm(X, mean=mu2, sd=sqrt(s2))
+  
+  ll <- log(p1*N1 + p2*N2) %>% sum
+  return (ll)
+}
+
+# test 
+theta <- c(mu1=70, mu2=60, sigma1=10, sigma2=15, p1=.3)
+X <- read.table("Hope Heights.txt", header=T) %>% dplyr::pull(Height)
+
+print(logL(X, theta))
+```
+
+```{r}
+grad_logL <- function(X, theta)
+{
+  p1 <- theta["p1"]; p2 <- 1-p1
+  mu1 <- theta["mu1"]; mu2 <- theta["mu2"]
+  s1 <- theta["sigma1"]; s2 <- theta["sigma2"]
+  
+  N1 <- dnorm(X, mean=mu1, sd=sqrt(s1))
+  N2 <- dnorm(X, mean=mu2, sd=sqrt(s2))
+  D <- p1*N1 + p2*N2
+  
+  n_samples <- length(X)
+  grad_samples <- matrix(1/D*c(mu1=p1*(X - mu1)/s1*N1,
+                              mu2=p2*(X - mu2)/s2*N2,
+                              s1=p1*(-1/s1 + (X - mu1)^2/s1^(3/2))*N1,
+                              s2=p2*(-1/s2 + (X - mu2)^2/s2^(3/2))*N2,
+                              p1=N1 - N2),
+                          nrow=n_samples,
+                          ncol=length(theta))
+  
+  grad <- grad_samples %>% colSums %>% setNames(c("mu1", "mu2", "s1", "s2", "p1"))
+  return (grad_samples %>% colSums)
+}
+
+# test
+print(grad_logL(X, theta))
+```
+
+## (b.i)
+
+```{r, cache=T}
+norm <- function(x) sqrt(sum(x^2))
+
+MM_steepest_descent <- function(X, start_theta, 
+                                max_iter=100)
+{
+  theta <- start_theta
+  iter <- 1
+  
+  g <- grad_logL(X, theta)
+  while (norm(g) > 1E-3 & iter <= max_iter) {
+  
+    if (iter %% 10 == 0)
+    cat("iter=", iter, "likelihood=", logL(X, theta), "\n")
+    
+    ng <- g/norm(g)
+    s <- 1
+    new_theta <- theta + s*ng
+    
+    # back up if we exceed boundaries
+    while(new_theta["p1"] < 0 | new_theta["p1"] > 1 | 
+          new_theta["sigma1"] < 0 | new_theta["sigma2"] < 0) {
+      s <- s/2
+      new_theta <- theta + s*ng
+    }
+    
+    # backtrack
+    while(logL(X, new_theta) < logL(X, theta)) {
+       s <- s/2
+       new_theta <- theta + s*ng
+    }
+    
+    theta <- new_theta
+    g <- grad_logL(X, theta)
+    iter <- iter + 1
+  }
+
+  return (list(theta=theta, 
+               likelihood=logL(X, theta)))
+}
+
+# try a few starting points
+start_theta <- c(mu1=75, mu2=65, sigma1=10, sigma2=10, p1=.3)
+out1 <- MM_steepest_descent(X, start_theta, max_iter=100)
+print(out1)
+
+start_theta <- c(mu1=10, mu2=140, sigma1=250, sigma2=250, p1=.3)
+out2 <- MM_steepest_descent(X, start_theta, max_iter=100)
+print(out2)
+
+start_theta <- c(mu1=80, mu2=60, sigma1=1, sigma2=1, p1=.2)
+out3 <- MM_steepest_descent(X, start_theta, max_iter=100)
+print(out3)
+```
+
+The first starting point gives the highest likelihood and seems to split the heights roughly as we would expect (although only because we know the answer).
+
+## (b.ii)
+
+```{r}
+# nlm needs theta first
+f <- function(theta, X)
+{
+  return (logL(X, theta))
+}
+
+# try a few starting points
+start_theta <- c(mu1=70, mu2=60, sigma1=10, sigma2=15, p1=.3)
+nlm(f, p=start_theta, X)
+```
+
+nlm doesn't work well because it can't deal with the constraints.  
+
+## (c)
+
+Let $z_i$ be the mixture that $\hat{X}_i$ is drawn from.  Then,
+\begin{equation}
+P(z_i = 1 \ | \ \hat{X}_i, \theta) = \frac{p_1 \mathcal{N}(\hat{X}_i \ | \ \mu_1, \sigma_1^2)}
+{p_1 \mathcal{N}(\hat{X}_i \ | \ \mu_1, \sigma_1^2) + p_2 \mathcal{N}(\hat{X}_i \ | \ \mu_2, \sigma_2^2)}
+\end{equation}
+
+Let's choose the mixture based on which of $P(z_i = 1 \ | \ \hat{X}_i, \theta)$ and $P(z_i = 2 \ | \ \hat{X}_i, \theta)$ is bigger.
+
+```{r}
+# Get the theta that was best from b.i
+theta <- out1$theta
+theta
+Gender <- read.table("Hope Heights.txt", header=T) %>% dplyr::pull(Gender)
+
+classify_gender <- function(X, theta)
+{
+  p1 <- theta["p1"]; p2 <- 1-p1
+  mu1 <- theta["mu1"]; mu2 <- theta["mu2"]
+  s1 <- theta["sigma1"]; s2 <- theta["sigma2"]
+  
+  N1 <- dnorm(X, mean=mu1, sd=sqrt(s1))
+  N2 <- dnorm(X, mean=mu2, sd=sqrt(s2))
+  
+  # The first mixture has higher mu, so associate that with male gender
+  guess <- ifelse(p1*N1/(p1*N1 + p2*N2) > .5, 2, 1)
+  
+  return (guess)
+}
+
+guess_Gender <- classify_gender(X, theta)
+correct <- sum(Gender==guess_Gender)/length(Gender)
+print(correct)
+```
+
+We get roughly $81\%$ right.  Here's what the guesses and true genders look like.  Notice, we get the short men and tall women wrong, as would be expected.  
+```{r}
+data.frame(height=X, guess=guess_Gender, true=Gender) %>% dplyr::arrange(height)
+```
+
+# Problem 2
+
+## (a)
+
+If we multiply two matrices, $A$ and $B$, then the $ij$ entry of $AB$ is given by the dot product of the $i$th row of $A$ against the $j$th column of $B$.   Let $q^{(i)}$ be the $i$th column of $Q$.  Then $(Q^TQ)_{ij} = q^{(i)} \cdot q^{(j)}$.   This is $0$ if $i \ne j$, by orthogonality of the columns of $Q$, and is $1$ is $i = j$, by the normality.  We find $Q^TQ = I$ and therefore $Q^T = Q^{-1}$.
+
+## (c)
+
+Let $x = (\cos \alpha, \sin \alpha)$.  Then $x$ has an angle of $\alpha$ with the positive x-axis.
+\begin{equation}
+Rx = \left(
+\begin{array}{c}
+\cos \theta \cos \alpha - \sin \theta \sin \alpha \\
+\sin \theta \cos \alpha + \cos \theta \sin \theta
+\end{array}
+\right)
+= 
+\left(
+\begin{array}{c}
+\cos \theta +\alpha  \\
+\sin \theta + \alpha 
+\end{array}
+\right),
+\end{equation}
+by the triginometric summation identities for $\sin$ and $\cos$.   So we see that $Rx$ makes an angle of $\alpha + \theta$ with the x-axis, so that $R$ rotates $x$ by $\theta$.
+
+Notice that if $x = (x_1, x_2)$ then $Fx = (x_1, -x_2)$, which is a reflection of $x$ about the x-axis.
+
+## (d)
+
+First let's describe what the general $2 \times 2$ orthonormal matrix $Q$ looks like.  Let $q^{(1)}$ and $q^{(2)}$ be the two columns of $Q$.   We know that both $q^{(i)}$ are of unit length.  Therefore, we can set $q^{(1)} = (\cos \theta, \sin \theta)$ without loss of generality, since any unit length vector in $\mathbb{R}^2$ can be expressed in this way for some $\theta$.  Now let $q^{(2)} = (a,b)$.   Then we require
+\begin{equation}
+a \cos \theta + b \sin \theta = 0,
+\end{equation}
+by orthogonality of $q^{(1)}$ and $q^{(2)}$, and
+\begin{equation}
+a^2 + b^2  = 1,
+\end{equation}
+by the normality of $q^{(2)}$.   Solving for $b$ in  the first equation and plugging into the second equation gives $b = \cos \theta$, $a = -\sin \theta$ or $b = -cos \theta$, $a= \sin \theta$.   So then we have two possibilities for the general orthonormal $Q$ matrix,
+\begin{equation}
+Q = \left(
+\begin{array}{cc}
+\cos \theta &  - \sin \theta \\
+\sin \theta & \cos \theta
+\end{array}
+\right)
+\end{equation}
+or
+\begin{equation}
+Q = \left(
+\begin{array}{cc}
+\cos \theta &   \sin \theta \\
+\sin \theta & -\cos \theta
+\end{array}
+\right)
+\end{equation}
+The first choise is $R$, the second choice is $RF$ (i.e. a reflection followed by a rotation).
+
+# Problem 3
+
+## (a)
+
+There are two ways to do this, depending on whether you assume the result that $MX$ is a multivariate normal.  
+
+If we assume the result that if $X$ is a multivariate normal and $M$ a matrix, then $MX$ is also multivariate normal, we just have to identify the mean and covariance matrix of $MX$.  We have
+\begin{equation}
+E[MX] = ME[X] = M\mu,
+\end{equation}
+showing that $MX$ has mean $M\mu$.   Now we compute the covariance matrix of $MX$.  
+\begin{equation}
+E[(MX - M\mu)(MX - M\mu)^T] = E[M(X-\mu)(X-\mu)^TM^T] = ME[(X-\mu)(X-\mu)^T]M^T
+= M\Sigma M^T,
+\end{equation}
+showing that $MX$ has covariance matrix $M\Sigma M^T$.  Then we conclude $MX \sim \mathcal{N}(M\mu, M\Sigma M^T)$.
+
+Alternatively, we can analyze the distribution of $MX$ and show that it is a multivariate normal and that it has mean $M\mu$ and covariance $M \Sigma M^T$.  To do this, let's consider it's multidimensional cdf (alternatively, we could consider it's generating function).  Let $c \in \mathbb{R}^n$. Then we write $Mx \le c$ to mean that every coordinate of $Mx$ is less than every respective coordinate of $c$.    
+\begin{align}
+P(MX \le c) &= P(X \le M^{-1} c) 
+\\ \notag
+  &= \int_{-\infty}^{(M^{-1}c)_1} \int_{-\infty}^{(M^{-1}c)_2} \cdots
+\int_{-\infty}^{(M^{-1}c)_n} \frac{1}{\sqrt{(2\pi)^n \text{det} \Sigma}}
+\exp[-(z - \mu)^T \Sigma^{-1} (z - \mu)/2] dz_1, dz_2 \cdots dz_n
+\end{align}
+To this integral, apply the change of variables $w=Mz$ (nothing random here, just transforming the integration variable!).  Pluggin this transformation (don't forget the Jacobian!)
+\begin{align}
+P(MX \le c)  = \int_{-\infty}^{c_1} \int_{-\infty}^{(c_2} \cdots
+\int_{-\infty}^{c_n} \frac{1}{\sqrt{(2\pi)^n \text{det} \Sigma}}
+\exp[-(M^{-1}w - \mu)^T \Sigma^{-1} (M^{-1}w - \mu)/2] 
+\text{det} (\frac{\partial z}{\partial w})
+dw_1  dw_2 \cdots dw_n.
+\end{align}
+The term $\left| \frac{\partial z}{\partial w}\right|$ is the determinant of the Jacobian of the transformation $w = Mz$.  The $ij$ term of the Jacobian is $\partial z_i/\partial w_j = M^{-1}_{ij}$, so that the Jacobian is simply $M^{-1}$.  Plugging all this in with some algebra gives,
+\begin{align} \label{E:1}
+P(Mx \le c)  = \int_{-\infty}^{c_1} \int_{-\infty}^{(c_2} \cdots
+\int_{-\infty}^{c_n} \frac{\text{det} M^{-1}}{\sqrt{(2\pi)^n \text{det} \Sigma}}
+\exp[-(M^{-1}w - \mu)^T \Sigma^{-1} (M^{-1}w - \mu)/2] 
+dw_1  dw_2 \cdots dw_n.
+\end{align}
+
+Now let's manipulate the term in the exponent,
+\begin{align}
+(M^{-1}w - \mu)^T \Sigma^{-1} (M^{-1}w - \mu)
+&= (M^{-1}(w - M\mu)^T \Sigma^{-1} M^{-1}(w - M\mu)
+\\ \notag &= (w - M\mu)^T ((M^{-1})^T \Sigma ^{-1} M^{-1}) (w - M \mu)
+\\ \notag &=  (w - M \mu)^T (M \Sigma M^T)^{-1} (w - M \mu),
+\end{align}
+where I've used $(M^{-1})^T \Sigma ^{-1} M^{-1} = (M \Sigma M^T)^{-1}$ which depends on the result $(M^{-1})^T = (M^T)^{-1}$.
+
+Now let's manipulate the determinants.  Recall that $\text{det}(AB) = \text{det}(A) \text{det}(B)$.  From this identity, one can show $\text{det}(M^{-1}) = 1/\text{det}(M)$.  Also recall, by definition of the determinant $\text{det}(M^T) = \text{det}(M)$.
+\begin{align}
+\frac{\text{det}(M^{-1})}{\sqrt{\text{det}\Sigma}}
+= \frac{1}{\sqrt{\text{det}\Sigma (\text{det} M)^2}}
+= \frac{1}{\sqrt{\text{det}M \Sigma M^T}}
+\end{align}
+
+Plugging these two manipulations into (\ref{E:1}) gives,
+\begin{align}
+P(MX \le c)  = \int_{-\infty}^{c_1} \int_{-\infty}^{(c_2} \cdots
+\int_{-\infty}^{c_n} \frac{1}{\sqrt{(2\pi)^n \text{det} M\Sigma M^T}}
+\exp[-(w - M\mu)^T (M\Sigma M^T)^{-1} (w - M\mu)/2]
+dw_1  dw_2 \cdots dw_n.
+\end{align}
+
+## (b)
+
+Let the $ii$th entry of $\Sigma$ be $\lambda_i$.  Then since $\Sigma$ is diagonal, $\Sigma^{-1}$ is diagonal with $1/\lambda_i$ as its $ii$th entry and its determinant is the product of the $\lambda_{ii}$.  Let's consider the cdf of $X$
+\begin{equation} \label{E:2}
+P(X \le c) = \int_{-\infty}^{c_1} \int_{-\infty}^{c_2} \cdots
+\int_{-\infty}^{c_n} \frac{1}{\sqrt{(2\pi)^n \text{det} \Sigma}}
+\exp[-(z - \mu)^T \Sigma^{-1} (z - \mu)/2] dz_1 dz_2 \cdots dz_n
+\end{equation}
+
+Then, we require the following two algebraic manipulations.
+\begin{equation}
+(z - \mu)^T \Sigma^{-1} (z - \mu)
+= \prod_{i=1}^n \frac{(z - \mu_i)^2}{\lambda_{ii}}
+\end{equation}
+and
+\begin{equation}
+ \frac{1}{\sqrt{(2\pi)^n \text{det} \Sigma}}
+ = \prod_{i=1}^n \frac{1}{\sqrt{2\pi \lambda_ii}}
+\end{equation}
+
+Plugging into (\ref{E:2}), gives
+\begin{align}
+P(X \le c) & = \int_{-\infty}^{c_1} \int_{-\infty}^{c_2} \cdots
+\int_{-\infty}^{c_n}  \prod_{i=1}^n \frac{1}{\sqrt{2\pi \lambda_ii}}
+\exp[-\frac{(z - \mu_i)^2}{2\lambda_{ii}}] dz_1 dz_2 \cdots dz_n
+\\ \notag
+& =  \prod_{i=1}^n \int_{-\infty}^{c_i} \frac{1}{\sqrt{2\pi \lambda_ii}}
+\exp[-\frac{(z - \mu_i)^2}{2\lambda_{ii}}] dz_i
+\\ \notag
+& = \prod_{i=1}^n P(X_i \le c)
+\end{align}
+But this shows independence since the cdf can be expressed as the product of the marginal cdfs.
+
+## (c)
+
+We have the spectral decomposition $\Sigma = QDQ^T$.   Then consider $X - \mu$, so we can make the mean $0$.  
+\begin{equation}
+Q^T(X - \mu) \sim \mathcal{N}(0, Q^T\Sigma Q) = \mathcal{N}(0, D)
+\end{equation}
+
+From (b) we know that the coordinates of $Q^T(X - \mu)$ are independent normals with variance given by the diagonal entries of $D$.  Let $Y \sim \mathcal{N}(0,D)$.  We can sample each coordinate of $Y$ using a univariate normal sampler.  Then from 2a, we have $X - \mu = QY$ (since the inverse of $Q^T$ is $Q$).  So to sample $X$, we sample $Y$ and then multiply by $Q$ and shift by $\mu$.
+
+```{r, cache=T}
+MVN_sampler <- function(mu, Sigma)
+{
+  eout <- eigen(Sigma)
+  Q <- eout$vectors
+  lambdas <- eout$values
+  n <- length(mu)
+  
+  Y <- rep(NA, n) %>% as.numeric
+  for (i in 1:n)
+    Y[i] <- rnorm(1, mean=0, sd=sqrt(lambdas[i]))
+  
+  X <- as.numeric(Q %*% Y + mu)
+  return (X)
+}
+
+
+mu <- c(100, -100)
+Sigma <- matrix(c(2, 2,
+                  2, 5), byrow=T, nrow=2)
+Q <- eigen(Sigma)$vectors
+D <- eigen(Sigma)$values
+Q
+D
+
+# let's use the sampler to visualize the density
+samples <- matrix(NA, nrow=3000, ncol=2)
+for (i in 1:3000)
+  samples[i,] <- MVN_sampler(mu, Sigma)
+plot(samples[,1], samples[,2], xlim=mu[1]+c(-8,8), ylim=mu[2]+c(-8,8), cex=.2,
+     xlab="X1", ylab="X2")
+lines(mu[1]+c(0,2*sqrt(D[1])*Q[1,1]), mu[2]+c(0,2*sqrt(D[1])*Q[2,1]), col="red", lwd=4)
+lines(mu[1]+c(0,2*sqrt(D[2])*Q[1,2]), mu[2]+c(0,2*sqrt(D[2])*Q[2,2]), col="red", lwd=4)
+```
+
+The red lines show the $q^{(1)}$ and $q{(2)}$ axes.  The coordinates of $Y$ are given on these axes, are independent and have variance given by the eigenvalues found on the diagonal of $D$.  The length of the red lines shows $2$ standard deviations.  In the picture, the red lines are not diagonal, but this is because R makes the plot rectangular, streching out the x-axis.  Notice that the columns of $Q$ are indeed orthogonal.
