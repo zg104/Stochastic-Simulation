@@ -17,5 +17,15 @@ So, how can we lower the parameters?
 
 Given the model, how can we deal with the problem from the perspective of probability?
 
-- computing probabilities of random vectors which involves high dimensional intergrals.
--- s
+Computing probabilities of random vectors which involves high dimensional intergrals.
+
+- directly estimate
++ MH algorithm
++ Gibbs sampling
+
+- exploit the structure 
++ Markov Chains --> P(x(t) = j | x(0) = i) = (M^t)_i,j
++ Forward / Backword equations
++ spectual decomposition / cholesky decomposition
++ pseudo-likelihood / steepest descent / Newton Method (Bayesian)
++ EM algorithm
