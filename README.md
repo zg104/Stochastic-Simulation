@@ -19,11 +19,11 @@ Given the model, how can we deal with the problem from the perspective of probab
 
 Computing probabilities of random vectors which involves high dimensional intergrals.
 
-- directly estimate
+- 1 directly estimate
 + MH algorithm
 + Gibbs sampling
 
-- exploit the structure 
+- 2 exploit the structure 
 + Markov Chains --> P(x(t) = j | x(0) = i) = (M^t)_i,j
 + Forward / Backword equations
 + spectual decomposition / cholesky decomposition
