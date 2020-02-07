@@ -1,4 +1,7 @@
 # Stochastic-Simulation
 
-## Here are several perceptions and concepts of stochastic simulation
+Here are several perceptions and concepts of stochastic simulation.
+
+- GMM
+
 
